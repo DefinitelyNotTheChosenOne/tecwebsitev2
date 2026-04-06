@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { 
   Shield, AlertTriangle, MessageSquare, ExternalLink, 
-  Scale, CheckCircle, PlusCircle, ArrowRight, Brain, RefreshCcw
+  Scale, CheckCircle, PlusCircle, ArrowRight, Brain, RefreshCcw,
+  BarChart3, Users, Activity
 } from 'lucide-react';
 import AdminHeader from '@/components/AdminHeader';
 import { motion } from 'framer-motion';
@@ -78,19 +79,28 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-[#0f172a] text-white font-sans p-12 overflow-x-hidden">
       <AdminHeader adminName={profile?.full_name || 'System Admin'} />
 
-      {/* Analytics Snapshot */}
+      {/* Analytics Snapshot - Interactive Launchpads */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-20">
         {[
-          { label: "Active Disputes", value: "3", icon: AlertTriangle, color: "text-red-400" },
-          { label: "Flagged Content", value: "12", icon: Shield, color: "text-brand-primary" },
-          { label: "Pending Escrow", value: "$4,240", icon: CheckCircle, color: "text-green-400" },
-          { label: "Marketplace Tax", value: "20%", icon: CheckCircle, color: "text-zinc-500" },
+          { label: "Active Disputes", value: "3", icon: AlertTriangle, color: "text-red-400", path: "/admin/moderation" },
+          { label: "Flagged Content", value: "12", icon: Shield, color: "text-brand-primary", path: "/admin/moderation" },
+          { label: "Pending Escrow", value: "₱4,240", icon: CheckCircle, color: "text-green-400", path: "/admin/escrow" },
+          { label: "Marketplace Tax", value: "20%", icon: Activity, color: "text-zinc-500", path: "#" },
         ].map((stat, i) => (
-          <div key={i} className="bg-white/5 border border-white/10 p-8 rounded-3xl backdrop-blur-xl">
-             <stat.icon className={`w-8 h-8 mb-6 ${stat.color}`} />
-             <span className="block text-4xl font-black mb-1">{stat.value}</span>
-             <span className="block text-xs font-bold text-brand-secondary uppercase tracking-widest">{stat.label}</span>
-          </div>
+          <Link 
+            key={i} 
+            href={stat.path}
+            className="bg-white/5 border border-white/10 p-8 rounded-3xl backdrop-blur-xl hover:bg-white/10 hover:border-brand-primary/50 transition-all group"
+          >
+             <stat.icon className={`w-8 h-8 mb-6 ${stat.color} group-hover:scale-110 transition-transform`} />
+             <div className="flex items-end justify-between">
+                <div>
+                   <span className="block text-4xl font-black mb-1 text-white">{stat.value}</span>
+                   <span className="block text-xs font-bold text-brand-secondary uppercase tracking-widest">{stat.label}</span>
+                </div>
+                <ArrowRight className="w-5 h-5 text-brand-secondary opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+             </div>
+          </Link>
         ))}
       </div>
 
@@ -98,33 +108,46 @@ export default function AdminDashboardPage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex gap-6 mb-20"
+        className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20"
       >
-        <Link href="/admin/subjects/new" className="flex-1 p-8 bg-brand-primary hover:bg-brand-secondary transition-all rounded-[2.5rem] flex items-center justify-between group shadow-2xl">
+        <Link href="/admin/subjects/new" className="p-8 bg-brand-primary hover:bg-brand-secondary transition-all rounded-[2.5rem] flex items-center justify-between group shadow-2xl">
           <div className="flex items-center gap-6">
             <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
                <PlusCircle className="w-8 h-8 text-white group-hover:scale-110 transition-transform" />
             </div>
             <div>
-              <span className="block text-xl font-black text-white">Deploy Subject Market</span>
-              <span className="text-white/60 text-xs font-bold uppercase tracking-widest leading-none">Add Categories to Marketplace</span>
+              <span className="block text-xl font-black text-white">Deploy Subject</span>
+              <span className="text-white/60 text-xs font-bold uppercase tracking-widest leading-none">Add Categories</span>
             </div>
           </div>
           <ArrowRight className="w-8 h-8 text-white/40 group-hover:translate-x-2 transition-transform" />
         </Link>
 
-        <div className="flex-1 p-8 bg-white/5 border border-white/10 rounded-[2.5rem] flex items-center justify-between group backdrop-blur-xl">
+        <Link href="/admin/users" className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] flex items-center justify-between group backdrop-blur-xl hover:bg-white/10 transition-all">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 bg-brand-primary/20 rounded-2xl flex items-center justify-center">
+               <Users className="w-8 h-8 text-brand-primary" />
+            </div>
+            <div>
+              <span className="block text-xl font-black">User Registry</span>
+              <span className="text-brand-secondary text-xs font-bold uppercase tracking-widest leading-none">Status & Strikes</span>
+            </div>
+          </div>
+          <ArrowRight className="w-6 h-6 text-brand-secondary" />
+        </Link>
+
+        <Link href="/support" className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] flex items-center justify-between group backdrop-blur-xl hover:bg-white/10 transition-all">
           <div className="flex items-center gap-6">
             <div className="w-16 h-16 bg-brand-primary/20 rounded-2xl flex items-center justify-center">
                <MessageSquare className="w-8 h-8 text-brand-primary" />
             </div>
             <div>
               <span className="block text-xl font-black">Support Command</span>
-              <span className="text-brand-secondary text-xs font-bold uppercase tracking-widest leading-none">3 Pending Inquiries</span>
+              <span className="text-brand-secondary text-xs font-bold uppercase tracking-widest leading-none">Live Inquiries</span>
             </div>
           </div>
           <ExternalLink className="w-6 h-6 text-brand-secondary" />
-        </div>
+        </Link>
       </motion.div>
 
       {/* Main Command Grid */}
@@ -207,6 +230,83 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Global Intelligence - Real-time Analytics Engine */}
+      <section className="mt-20">
+         <h2 className="text-2xl font-black flex items-center gap-3 mb-10">
+            <BarChart3 className="text-brand-primary" /> Global Intelligence
+         </h2>
+         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 bg-white/5 border border-white/10 rounded-[3rem] p-10 backdrop-blur-3xl relative overflow-hidden group">
+               <div className="flex items-center justify-between mb-12">
+                  <div>
+                     <span className="text-[10px] font-black tracking-[4px] text-brand-secondary uppercase">Volumetric Throughput</span>
+                     <h3 className="text-3xl font-black text-white mt-1">Transaction Velocity</h3>
+                  </div>
+                  <div className="text-right">
+                     <span className="text-green-400 font-black text-lg flex items-center gap-2 justify-end">
+                        +14.2% <ArrowRight className="w-4 h-4 -rotate-45" />
+                     </span>
+                     <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Last 24 Hours</span>
+                  </div>
+               </div>
+               
+               {/* Mock Graph UI */}
+               <div className="h-48 w-full flex items-end gap-2 px-2 pb-2 border-b border-white/5">
+                  {[40, 65, 45, 90, 65, 80, 100, 85, 95, 70, 85, 110, 90, 120].map((h, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ height: 0 }}
+                      animate={{ height: `${h}%` }}
+                      transition={{ delay: i * 0.05, duration: 1 }}
+                      className="flex-1 bg-gradient-to-t from-brand-primary/40 to-brand-primary rounded-t-sm"
+                    />
+                  ))}
+               </div>
+               <div className="flex justify-between mt-4 text-[9px] font-black text-white/20 uppercase tracking-[2px]">
+                  <span>00:00</span>
+                  <span>06:00</span>
+                  <span>12:00</span>
+                  <span>18:00</span>
+                  <span>23:59</span>
+               </div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-[3rem] p-10 backdrop-blur-3xl">
+               <span className="text-[10px] font-black tracking-[4px] text-brand-secondary uppercase">Live System Access</span>
+               <h3 className="text-3xl font-black text-white mt-1 mb-10">Daily Active Users</h3>
+               
+               <div className="space-y-8">
+                  {[
+                    { type: "Student Terminals", count: "1,240", percent: 65 },
+                    { type: "Tutor Terminals", count: "482", percent: 25 },
+                    { type: "System Admin", count: "14", percent: 10 },
+                  ].map((stat, i) => (
+                    <div key={i} className="space-y-3">
+                       <div className="flex justify-between items-end">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">{stat.type}</span>
+                          <span className="text-sm font-black text-white">{stat.count}</span>
+                       </div>
+                       <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${stat.percent}%` }}
+                            transition={{ delay: 0.5 + (i * 0.2), duration: 1 }}
+                            className="h-full bg-brand-primary"
+                          />
+                       </div>
+                    </div>
+                  ))}
+               </div>
+
+               <div className="mt-12 p-6 bg-brand-primary/5 border border-brand-primary/20 rounded-2xl">
+                  <p className="text-[10px] font-bold text-brand-primary uppercase tracking-widest leading-relaxed">
+                     System load at <span className="text-white">42% Capacity</span>. No latency spikes detected in the last <span className="text-white">60 minutes</span>.
+                  </p>
+               </div>
+            </div>
+         </div>
+      </section>
     </div>
   );
 }

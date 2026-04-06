@@ -253,7 +253,7 @@ export default function Home() {
                   </div>
                   <div className="text-right">
                     <span className="block text-[10px] font-black text-brand-secondary tracking-widest uppercase mb-1">Starting At</span>
-                    <span className="text-2xl font-black italic">${service.price ?? '49'}</span>
+                    <span className="text-2xl font-black italic">₱{service.price ?? '49'}</span>
                   </div>
                 </div>
               </div>

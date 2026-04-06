@@ -1,179 +1,157 @@
 'use client';
-
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Filter, DollarSign, Clock, ArrowRight, BookOpen, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { 
+  ArrowLeft, Search, Filter, 
+  Clock, MapPin, DollarSign, 
+  ChevronRight, Bookmark, ArrowUpRight,
+  TrendingUp, Zap, Sparkles, User
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import PageTransition from '@/components/PageTransition';
 
-export default function HelpWantedBoard() {
-  const [activeFilter, setActiveFilter] = useState('All');
+export default function HelpWantedFeed() {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data representing database 'help_requests' table
-  const openRequests = [
-    {
-      id: "REQ-4029",
-      student: "User_491",
-      title: "Need a crash course on AP Calculus Integrals",
-      subject: "Mathematics",
-      description: "I have a midterm on Friday. I need someone to patiently walk me through area under a curve and volume by cross-sections.",
-      budget: 45,
-      urgency: "High",
-      postedAt: "10 mins ago"
-    },
-    {
-      id: "REQ-4030",
-      student: "NursingStudent_J",
-      title: "Help understanding Pharmacology Case Studies",
-      subject: "Nursing",
-      description: "Struggling to connect drug classes with patient symptoms in my latest case study assignment. Looking for an upperclassman.",
-      budget: 30,
-      urgency: "Medium",
-      postedAt: "1 hr ago"
-    },
-    {
-      id: "REQ-4031",
-      student: "CodeNewbie101",
-      title: "C++ Pointers and Memory Leaks Debugging",
-      subject: "Computer Science",
-      description: "My homework assignment keeps throwing a seg fault. Need a tutor to hop on a call and explain memory management.",
-      budget: 60,
-      urgency: "High",
-      postedAt: "3 hrs ago"
-    },
-    {
-      id: "REQ-4032",
-      student: "LawPrepper",
-      title: "Constitutional Law Exam Prep - Commerce Clause",
-      subject: "Law",
-      description: "Looking for a law student to help me outline cases related to the Commerce Clause for my finals.",
-      budget: 50,
-      urgency: "Medium",
-      postedAt: "5 hrs ago"
-    }
-  ];
+  useEffect(() => {
+    const fetchRequests = async () => {
+      const { data } = await supabase
+        .from('help_requests')
+        .select(`
+          *,
+          profiles:student_id (full_name)
+        `)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false });
+      
+      setRequests(data || []);
+      setLoading(false);
+    };
+
+    fetchRequests();
+  }, []);
 
   return (
-    <PageTransition>
-      <div className="min-h-screen bg-[#0f172a] text-white font-sans overflow-x-hidden pt-24 pb-32 px-6">
+    <div className="min-h-screen bg-[#0f172a] text-white p-6 md:p-12 font-sans selection:bg-brand-primary selection:text-brand-dark overflow-x-hidden">
+      
+      {/* Background Ambience */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-20">
+         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-brand-primary blur-[160px] rounded-full animate-pulse" />
+         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-900 blur-[160px] rounded-full" />
+      </div>
+
+      <header className="max-w-6xl mx-auto mb-16 relative z-10">
+        <Link href="/dashboard" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group">
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1" /> Back to Dashboard
+        </Link>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mt-8">
+           <div>
+              <div className="flex items-center gap-3 mb-4">
+                 <TrendingUp className="w-5 h-5 text-brand-primary" />
+                 <span className="px-3 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-full text-[9px] font-black uppercase tracking-widest text-brand-primary">Live Marketplace Feed</span>
+              </div>
+              <h1 className="text-6xl font-black italic tracking-tighter leading-none mb-2">Available <span className="text-brand-primary">Bids</span></h1>
+              <p className="text-brand-secondary font-medium tracking-tight text-sm px-1">Browse active requests and fire off your expert bids.</p>
+           </div>
+           
+           <div className="flex items-center gap-4 bg-white/5 p-2 rounded-[2rem] border border-white/5 backdrop-blur-3xl">
+              <div className="relative group">
+                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-secondary group-focus-within:text-brand-primary transition-colors" />
+                 <input className="bg-transparent border-none py-3 pl-12 pr-6 rounded-2xl focus:ring-0 text-sm font-bold w-full md:w-64 placeholder-brand-secondary" placeholder="Search by subject..." />
+              </div>
+              <button className="p-3 bg-brand-primary text-brand-dark rounded-2xl hover:scale-105 transition-transform"><Filter className="w-5 h-5" /></button>
+           </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-12 relative z-10">
         
-        {/* Header Section */}
-        <div className="max-w-6xl mx-auto mb-16 relative">
-          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-brand-primary/10 rounded-full blur-[100px] pointer-events-none" />
-          
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 relative z-10 block">
-            <div>
-              <Link href="/" className="inline-flex items-center gap-2 text-3xl font-black tracking-tighter mb-8 hover:scale-105 transition-transform group">
-                Tutor<span className="text-brand-primary">Match</span>
-                <div className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse mt-3" />
-              </Link>
-              <h1 className="text-5xl md:text-6xl font-black tracking-tighter uppercase mb-4">
-                Help <span className="text-brand-primary italic">Wanted</span>
-              </h1>
-              <p className="text-brand-secondary text-lg font-medium max-w-xl">
-                Browse real-time requests from students needing immediate help. Pitch your expertise, set your price, and start teaching.
-              </p>
-            </div>
-            
-            <Link 
-              href="/help-wanted/new"
-              className="px-8 py-4 bg-white text-brand-dark rounded-full font-black uppercase text-xs tracking-widest hover:bg-brand-primary hover:text-white transition-all shadow-xl"
-            >
-              Post a Request
-            </Link>
-          </div>
-        </div>
-
-        {/* Filters and Search */}
-        <div className="max-w-6xl mx-auto mb-12 flex flex-col md:flex-row gap-6 items-center justify-between">
-          <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 hide-scrollbar">
-            {['All', 'Mathematics', 'Computer Science', 'Nursing', 'Law', 'Chemistry'].map(filter => (
-              <button 
-                key={filter}
-                onClick={() => setActiveFilter(filter)}
-                className={`px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all ${
-                  activeFilter === filter 
-                    ? 'bg-brand-primary text-white border border-brand-primary' 
-                    : 'bg-white/5 text-brand-secondary border border-white/10 hover:bg-white/10'
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative w-full md:w-72">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-secondary" />
-            <input 
-              type="text" 
-              placeholder="Search concepts..." 
-              className="w-full bg-white/5 border border-white/10 rounded-full pl-12 pr-6 py-3 text-sm text-white placeholder-brand-secondary focus:outline-none focus:border-brand-primary transition-colors font-medium"
-            />
-          </div>
-        </div>
-
-        {/* Requests Feed */}
-        <main className="max-w-6xl mx-auto">
-          <motion.div 
-            initial="hidden"
-            animate="show"
-            variants={{
-              hidden: { opacity: 0 },
-              show: { opacity: 1, transition: { staggerChildren: 0.1 } }
-            }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-6"
-          >
-            {openRequests.map((req, i) => (
+        {/* Left Side: The Feed */}
+        <div className="lg:col-span-3 space-y-8">
+          <AnimatePresence mode="popLayout">
+            {loading ? (
+              <div className="h-64 flex items-center justify-center">
+                 <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : requests.length === 0 ? (
+               <div className="h-96 flex flex-col items-center justify-center text-center opacity-40">
+                  <Zap className="w-16 h-16 mb-4 text-brand-secondary" />
+                  <h3 className="text-2xl font-black uppercase italic">Marketplace idle</h3>
+                  <p className="text-sm font-bold">No active requests found in the current sector.</p>
+               </div>
+            ) : requests.map((req, i) => (
               <motion.div 
                 key={req.id}
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  show: { opacity: 1, y: 0 }
-                }}
-                className="bg-white/5 border border-white/5 hover:border-brand-primary/30 rounded-[2rem] p-8 flex flex-col transition-all cursor-pointer group hover:bg-white/[0.08]"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/[0.07] p-8 md:p-10 rounded-[3rem] transition-all group relative overflow-hidden shadow-2xl"
               >
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <span className="inline-block px-3 py-1 rounded-md bg-white/10 text-[10px] font-black uppercase text-brand-primary tracking-widest mb-3">
-                      {req.subject}
-                    </span>
-                    <h3 className="text-xl font-bold leading-tight group-hover:text-brand-primary transition-colors mb-2">
-                      {req.title}
-                    </h3>
-                    <div className="flex items-center gap-2 text-xs font-bold text-brand-secondary">
-                      <User className="w-3 h-3" /> {req.student}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="block text-[10px] font-black text-brand-secondary uppercase tracking-widest mb-1">Budget</span>
-                    <span className="text-2xl font-black tracking-tight italic">${req.budget}</span>
-                  </div>
-                </div>
+                {/* Visual Flair */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/10 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full -translate-y-1/2 translate-x-1/2" />
+                
+                <div className="flex flex-col md:flex-row justify-between items-start gap-8 relative z-10">
+                   <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-6">
+                        <span className="px-4 py-1.5 bg-brand-primary text-brand-dark rounded-full text-[10px] font-black uppercase tracking-widest leading-none shadow-[0_0_20px_rgba(82,109,130,0.4)]">{req.subject}</span>
+                        <span className="text-[10px] font-bold text-brand-secondary uppercase tracking-widest flex items-center gap-2"><Clock className="w-3 h-3" /> Latest Request</span>
+                      </div>
+                      <h3 className="text-3xl font-black italic tracking-tight mb-4 leading-none group-hover:text-brand-primary transition-colors">{req.title}</h3>
+                      <p className="text-brand-secondary text-sm leading-relaxed mb-8 line-clamp-2 font-medium max-w-2xl">{req.description}</p>
+                      <div className="flex items-center gap-6 mt-auto">
+                        <div className="flex items-center gap-2 text-xs font-bold text-brand-secondary"><MapPin className="w-4 h-4" /> Global Tunnel</div>
+                        <div className="w-1 h-1 rounded-full bg-white/20" />
+                        <div className="flex items-center gap-2 text-xs font-bold text-white/60 uppercase">Student: {req.profiles?.full_name || 'Verified User'}</div>
+                      </div>
+                   </div>
 
-                <p className="text-sm text-brand-secondary/80 leading-relaxed mb-8 flex-1 line-clamp-3">
-                  {req.description}
-                </p>
-
-                <div className="flex items-center justify-between pt-6 border-t border-white/10">
-                  <div className="flex items-center gap-4 text-xs font-bold text-brand-secondary">
-                    <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {req.postedAt}</span>
-                    {req.urgency === 'High' && (
-                      <span className="text-red-400 font-bold uppercase tracking-widest flex items-center gap-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" /> Urgent
-                      </span>
-                    )}
-                  </div>
-                  
-                  <button className="flex items-center gap-2 text-brand-primary font-black uppercase text-[10px] tracking-widest group-hover:translate-x-1 transition-transform">
-                    Submit Bid <ArrowRight className="w-4 h-4" />
-                  </button>
+                   <div className="flex flex-col items-end gap-6 w-full md:w-auto h-full justify-between pb-2">
+                       <div className="text-right">
+                          <span className="block text-[10px] font-black text-brand-secondary uppercase tracking-[3px] mb-2">Budget Target</span>
+                          <span className="text-4xl font-black tracking-tight italic text-brand-primary shadow-brand-primary/20">₱{req.budget}</span>
+                       </div>
+                       <Link 
+                        href={`/help-wanted/${req.id}`}
+                        className="w-full md:w-auto px-10 py-5 bg-white/5 border border-white/10 hover:bg-brand-primary hover:text-brand-dark hover:border-brand-primary rounded-2xl font-black text-[10px] uppercase tracking-[2px] transition-all flex items-center justify-center gap-3 group/btn"
+                       >
+                         Express Interest <ArrowUpRight className="w-4 h-4 group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
+                       </Link>
+                   </div>
                 </div>
               </motion.div>
             ))}
-          </motion.div>
-        </main>
+          </AnimatePresence>
+        </div>
 
-      </div>
-    </PageTransition>
+        {/* Right Side: Market Stats */}
+        <aside className="lg:col-span-1 space-y-10">
+           <div className="bg-brand-primary text-brand-dark p-10 rounded-[3rem] shadow-[0_40px_100px_-20px_rgba(82,109,130,0.5)] relative overflow-hidden group">
+              <TrendingUp className="absolute top-4 right-4 w-6 h-6 opacity-20" />
+              <h4 className="text-xs font-black uppercase tracking-[4px] mb-8">Quick Intel</h4>
+              <div className="space-y-8 relative z-10">
+                 <div>
+                    <span className="text-5xl font-black italic block mb-1">₱42.1k</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total Daily Pipeline</span>
+                 </div>
+                 <div>
+                    <span className="text-5xl font-black italic block mb-1">104</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Bids In Progress</span>
+                 </div>
+              </div>
+           </div>
+
+           <div className="bg-white/5 border border-white/10 p-10 rounded-[3rem] backdrop-blur-2xl">
+              <h4 className="text-[10px] font-black uppercase tracking-[3px] text-brand-primary mb-8 underline decoration-brand-primary/30 underline-offset-8">Trending Topics</h4>
+              <div className="flex flex-wrap gap-3">
+                 {['Calculus', 'Next.js', 'Phyton', 'React', 'Marketing'].map(tag => (
+                    <button key={tag} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-bold hover:border-brand-primary/50 transition-colors">{tag}</button>
+                 ))}
+              </div>
+           </div>
+        </aside>
+      </main>
+
+    </div>
   );
 }

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, Eye, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, ArrowRight, ArrowLeft, User } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -10,13 +10,20 @@ export default function AuthPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleAuth = async () => {
     setIsLoading(true);
     const { error } = isSignUp
-      ? await supabase.auth.signUp({ email, password })
+      ? await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: {
+            data: { full_name: fullName }
+          }
+        })
       : await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
@@ -28,7 +35,8 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6 font-sans relative overflow-hidden">
+    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6 font-sans relative overflow-hidden text-white">
+      
 
       {/* Animated Background Blobs */}
       <motion.div
@@ -106,6 +114,31 @@ export default function AuthPage() {
             </div>
 
             <div className="space-y-6">
+              {/* Full Name Input (Registration Only) */}
+              <AnimatePresence>
+                {isSignUp && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+                    exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    className="space-y-2 overflow-hidden"
+                  >
+                    <label className="block text-[10px] font-black uppercase tracking-[2px] text-brand-secondary ml-1">Legal Full Name</label>
+                    <div className="relative group">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-secondary group-focus-within:text-brand-primary transition-colors" />
+                      <input
+                        type="text"
+                        placeholder="e.g. John Doe"
+                        className="w-full bg-black/40 border border-white/5 py-4 pl-12 pr-4 rounded-2xl text-white font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/50 transition-all placeholder-white/20"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        required={isSignUp}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Email Input */}
               <motion.div whileTap={{ scale: 0.995 }} className="space-y-2">
                 <label className="block text-[10px] font-black uppercase tracking-[2px] text-brand-secondary ml-1">Email Address</label>
@@ -164,6 +197,17 @@ export default function AuthPage() {
                   transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                 />
               </motion.button>
+
+              {/* Back to Home Link - Solidly centered below main action */}
+              <div className="pt-4 flex justify-center">
+                 <Link 
+                   href="/" 
+                   className="flex items-center gap-2.5 text-[10px] font-black uppercase tracking-[3px] text-brand-secondary/40 hover:text-brand-primary transition-all group py-4"
+                 >
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1.5 transition-transform" />
+                    Back to Tutor<span className="italic">Match</span>
+                 </Link>
+              </div>
             </div>
           </motion.div>
         </AnimatePresence>
