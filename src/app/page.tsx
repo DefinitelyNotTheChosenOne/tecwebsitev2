@@ -1,173 +1,214 @@
 'use client';
-import React, { useEffect, useState } from "react";
-import { Search, Code, Video, TerminalSquare, BookOpen, PenTool, Mic, Share2, Palette, Monitor, Music as MusicIcon, Building2, User, UserCircle, Briefcase, PlusCircle, LogOut } from 'lucide-react';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-
-const fallbackServices = [
-  { title: "Website Development", category: "Programming", description: "Custom, responsive sites", price: 150 },
-  { title: "Video Editing", category: "Video", description: "Professional cut & effects", price: 50 },
-  { title: "Software Development", category: "Programming", description: "Robust applications", price: 300 },
-];
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Layout, Monitor, PlusCircle, LogIn, 
+  LogOut, Star, MessageSquare 
+} from 'lucide-react';
+import Link from 'next/link';
 
 export default function Home() {
+  const [services, setServices] = useState<any[]>([]);
   const [session, setSession] = useState<any>(null);
-  const [dbServices, setDbServices] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
+  const [supportThreadCount, setSupportThreadCount] = useState(0);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        fetchProfile(session.user.id);
+        fetchSupportCount();
+      }
+    });
     fetchServices();
   }, []);
 
+  const fetchSupportCount = async () => {
+    const { data } = await supabase.from('admin_messages').select('user_id');
+    if (data) {
+      const uniqueUsers = new Set(data.map(item => item.user_id));
+      setSupportThreadCount(uniqueUsers.size);
+    }
+  };
+
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, role')
+      .eq('id', userId)
+      .single();
+    if (data) setProfile(data);
+  };
+
   const fetchServices = async () => {
-    const { data, error } = await supabase.from('services').select('*').limit(8);
-    if (!error && data) setDbServices(data);
+    const { data } = await supabase.from('services').select('*');
+    if (data && data.length > 0) setServices(data);
+    else setServices(fallbackServices);
   };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    window.location.reload();
   };
 
-  const displayServices = dbServices.length > 0 ? dbServices : fallbackServices;
-
   return (
-    <div className="min-h-screen bg-brand-light text-brand-dark font-sans selection:bg-brand-primary selection:text-white">
-      
-      {/* Navigation Layer */}
-      <nav className="sticky top-0 z-50 bg-brand-dark text-white shadow-xl">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 bg-brand-light text-brand-dark rounded-xl flex items-center justify-center font-black text-xl italic tracking-tighter shadow-inner group-hover:scale-105 transition-transform">
-              f<span className="text-brand-primary font-sans lowercase not-italic">.</span>
-            </div>
-            <span className="text-2xl font-black tracking-tight hidden sm:block">
-              freelance<span className="text-brand-secondary">hub</span>
-            </span>
-          </Link>
-          
-          <div className="hidden lg:flex flex-1 max-w-xl mx-8 relative">
-            <input 
-              type="text" 
-              placeholder="What service are you looking for today?" 
-              className="w-full py-3 px-5 pr-12 rounded-full bg-brand-primary/20 border border-brand-primary/30 text-white placeholder-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-light transition-all"
-            />
-            <button className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-brand-primary rounded-full hover:bg-brand-secondary transition-colors text-brand-dark">
-              <Search className="w-4 h-4 text-white" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4 text-sm font-semibold">
-            {!session ? (
-              <Link href="/auth" className="px-6 py-2.5 bg-brand-primary hover:bg-brand-secondary transition-all rounded-full font-bold">
-                Join Now
-              </Link>
-            ) : (
-              <div className="flex items-center gap-4">
-                <Link href="/services/new" className="flex items-center gap-2 text-brand-secondary hover:text-white transition-colors group">
-                  <PlusCircle className="w-5 h-5 group-hover:scale-110 transition-transform" /> Post Service
-                </Link>
-                <div className="h-4 w-px bg-white/10" />
-                <button 
-                  onClick={handleSignOut}
-                  className="flex items-center gap-2 text-red-400 hover:text-red-500 transition-colors"
-                >
-                  <LogOut className="w-5 h-5" /> Sign Out
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+    <div className="bg-[#0f172a] min-h-screen text-white font-sans overflow-x-hidden">
+      {/* Dynamic Navbar */}
+      <nav className="border-b border-white/5 py-6 px-10 flex items-center justify-between sticky top-0 bg-[#0f172a]/80 backdrop-blur-3xl z-[100]">
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="text-2xl font-black italic tracking-tighter text-brand-primary"
+        >
+          FreelanceHub
+        </motion.div>
         
-        {/* Category Subnav */}
-        <div className="bg-brand-primary text-brand-light/80 text-xs md:text-sm font-medium overflow-x-auto no-scrollbar border-t border-brand-dark">
-          <div className="max-w-7xl mx-auto px-6 py-3 flex gap-6 whitespace-nowrap">
-            <span className="hover:text-white cursor-pointer transition-colors block">Graphics & Design</span>
-            <span className="hover:text-white cursor-pointer transition-colors block">Programming & Tech</span>
-            <span className="hover:text-white cursor-pointer transition-colors block">Digital Marketing</span>
-            <span className="hover:text-white cursor-pointer transition-colors block">Video & Animation</span>
-            <span className="hover:text-white cursor-pointer transition-colors block">AI Services</span>
-          </div>
+        <div className="flex items-center gap-10">
+          <AnimatePresence mode="wait">
+            {!session ? (
+              <motion.div 
+                key="login"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0.1, scale: 0.9 }}
+              >
+                <Link href="/auth" className="flex items-center gap-2 text-brand-secondary hover:text-white transition-colors group">
+                  <LogIn className="w-5 h-5 group-hover:-translate-x-1" /> Join Now
+                </Link>
+              </motion.div>
+            ) : (
+              <motion.div 
+                key="signed-in"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center gap-6"
+              >
+                <div className="flex flex-col items-end mr-2">
+                   <span className="text-[10px] font-black text-brand-primary uppercase tracking-widest leading-none mb-1">Welcome back</span>
+                   <span className="text-sm font-bold text-white tracking-tight">{profile?.full_name || 'User'}</span>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <Link href="/support" className="flex items-center gap-2 text-brand-secondary hover:text-white transition-colors group relative pr-4">
+                    <MessageSquare className="w-5 h-5 group-hover:scale-110 transition-transform" /> 
+                    <span className="hidden lg:inline">Customer Support</span>
+                    {supportThreadCount > 0 && (
+                      <AnimatePresence>
+                        <motion.div 
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="absolute -top-1.5 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-lg border border-[#0f172a]"
+                        >
+                          {supportThreadCount >= 10 ? '9+' : supportThreadCount}
+                        </motion.div>
+                      </AnimatePresence>
+                    )}
+                  </Link>
+                  <div className="h-4 w-px bg-white/10" />
+                  <Link href="/services/new" className="flex items-center gap-2 text-brand-secondary hover:text-white transition-colors group">
+                    <PlusCircle className="w-5 h-5 group-hover:scale-110 transition-transform" /> Post Service
+                  </Link>
+                  <div className="h-4 w-px bg-white/10" />
+                  <button 
+                    onClick={handleSignOut}
+                    className="flex items-center gap-2 text-red-400/70 hover:text-red-400 transition-colors"
+                  >
+                    <LogOut className="w-5 h-5" /> Sign Out
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <main className="relative z-10 w-full overflow-hidden flex flex-col items-center">
-        <div className="w-full bg-brand-dark py-24 pb-32 px-6 relative flex justify-center items-center rounded-b-[3rem] shadow-2xl">
-          <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
-          
-          <div className="max-w-4xl relative z-10 text-center">
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-[1.1] tracking-tight mb-6">
-              Find the perfect <i className="text-brand-secondary font-serif font-medium">freelance</i> services for your business
-            </h1>
-            
-            <p className="max-w-2xl mx-auto text-brand-secondary text-lg mb-10 font-medium">
-              Join thousands of experts in website development, AI and creativity.
-            </p>
-
-            <div className="lg:hidden w-full max-w-xl mx-auto relative">
-              <input 
-                type="text" 
-                placeholder="Search for any service..." 
-                className="w-full py-4 px-6 pr-14 rounded-full bg-white text-brand-dark shadow-xl focus:outline-none focus:ring-4 focus:ring-brand-primary/50"
-              />
-              <button className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-brand-primary rounded-full hover:bg-brand-primary/90 text-white transition-colors">
-                <Search className="w-5 h-5" />
-              </button>
-            </div>
+      <header className="relative pt-32 pb-20 px-10 text-center overflow-hidden">
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="relative z-10"
+        >
+          <div className="inline-block px-4 py-1.5 rounded-full bg-brand-primary/10 border border-brand-primary/20 text-brand-primary text-[10px] uppercase font-black tracking-widest mb-8">
+            The Future of Freelancing
           </div>
+          <h1 className="text-7xl font-black mb-8 leading-[0.95] tracking-tight">
+            Scale your <span className="text-brand-primary">vision</span> with<br/> 
+            elite global <span className="text-brand-secondary underline-offset-8">talent</span>
+          </h1>
+          <p className="max-w-2xl mx-auto text-xl text-brand-secondary font-medium tracking-wide leading-relaxed">
+            Forget mediocre platforms. This is the Hub where deep technical expertise meets premium execution.
+          </p>
+        </motion.div>
+      </header>
+
+      {/* Services Grid */}
+      <main className="max-w-7xl mx-auto px-10 pb-40">
+        <div className="flex items-center justify-between mb-16 px-4">
+          <h2 className="text-3xl font-black flex items-center gap-4">
+            <Layout className="text-brand-primary w-8 h-8" /> Featured <span className="italic">Gigs</span>
+          </h2>
         </div>
 
-        {/* Services Grid Section */}
-        <div className="max-w-7xl mx-auto px-6 -mt-16 relative z-20 pb-32 w-full">
-          <div className="flex items-center justify-between mb-8 text-brand-dark">
-            <h2 className="text-2xl md:text-3xl font-black">Latest Premium Services</h2>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-            {displayServices.map((service, i) => {
-              return (
-                <div 
-                  key={i} 
-                  className="group bg-white p-6 rounded-2xl shadow-sm hover:shadow-2xl border border-brand-secondary/20 hover:border-brand-primary transition-all duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col justify-between overflow-hidden"
-                >
-                  <div className="mb-4">
-                    <div className="w-full h-32 bg-brand-light group-hover:bg-brand-dark text-brand-primary group-hover:text-white flex items-center justify-center transition-colors shadow-sm mb-4 rounded-xl">
-                      <Code className="w-10 h-10" />
-                    </div>
-                    <span className="text-[10px] uppercase font-black text-brand-secondary tracking-widest">{service.category}</span>
-                    <h3 className="text-lg font-bold text-brand-dark group-hover:text-brand-primary transition-colors leading-tight line-clamp-2 mt-1">
-                      {service.title}
-                    </h3>
+        <motion.div 
+          initial="hidden"
+          animate="show"
+          variants={{
+            hidden: { opacity: 0 },
+            show: {
+              opacity: 1,
+              transition: {
+                staggerChildren: 0.1
+              }
+            }
+          }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+        >
+          {services.map((service, i) => (
+            <motion.div 
+              key={i}
+              variants={{
+                hidden: { opacity: 0, scale: 0.9, y: 20 },
+                show: { opacity: 1, scale: 1, y: 0 }
+              }}
+              whileHover={{ y: -10, transition: { duration: 0.2 } }}
+              className="bg-white/5 border border-white/5 rounded-[2.5rem] p-4 group hover:bg-white/[0.08] transition-all cursor-pointer relative overflow-hidden flex flex-col"
+            >
+              <div className="h-56 bg-brand-dark rounded-[2rem] mb-6 flex items-center justify-center overflow-hidden border border-white/5">
+                 <Monitor className="w-16 h-16 text-brand-primary opacity-20" />
+              </div>
+              
+              <div className="px-4 pb-4 flex-1 flex flex-col">
+                <span className="text-[10px] font-black uppercase text-brand-primary tracking-[2px] mb-2 block">{service.category}</span>
+                <h3 className="text-2xl font-bold mb-4 line-clamp-2 leading-tight tracking-tight group-hover:text-brand-primary transition-colors">{service.title}</h3>
+                
+                <div className="mt-auto pt-6 border-t border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4 text-brand-primary fill-brand-primary" />
+                    <span className="font-bold text-sm">4.9</span>
                   </div>
-                  <div className="flex items-center justify-between mt-4">
-                    <span className="text-xs font-bold text-brand-primary/60">Starting at</span>
-                    <span className="text-xl font-black text-brand-dark">${service.price}</span>
+                  <div className="text-right">
+                    <span className="block text-[10px] font-black text-brand-secondary tracking-widest uppercase mb-1">Starting At</span>
+                    <span className="text-2xl font-black italic">${service.price ?? '49'}</span>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        </div>
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
       </main>
-
-      {/* Footer Banner */}
-      <footer className="bg-brand-dark text-white py-12">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8 text-center md:text-left">
-          <div>
-            <h2 className="text-3xl font-black mb-2">A whole world of freelance talent at your fingertips</h2>
-            <p className="text-brand-light font-medium">The best for every budget. Highly skilled. Always on time.</p>
-          </div>
-          {!session && (
-            <Link href="/auth" className="px-8 py-4 bg-white text-brand-dark font-black tracking-wide rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 transition-all">
-              Join FreelanceHub
-            </Link>
-          )}
-        </div>
-      </footer>
-      
     </div>
   );
 }
 
-
+const fallbackServices = [
+  { title: "Custom AI Agent Development using GPT-4o", category: "AI Development", price: 950 },
+  { title: "High-End Architecture Visualization & 3D Rendering", category: "Interior Design", price: 340 },
+  { title: "Next.js 15 Full-Stack SaaS Development", category: "Software Development", price: 1200 },
+  { title: "Professional Video Editing for YouTube & Ads", category: "Video Editing", price: 150 },
+  { title: "Luxury Brand Identity & Logo Suite", category: "Logo Design", price: 500 },
+  { title: "Social Media Strategy & Content Growth", category: "Social Media Marketing", price: 290 }
+];

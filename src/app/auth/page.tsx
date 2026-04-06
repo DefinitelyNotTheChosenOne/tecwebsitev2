@@ -2,16 +2,19 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { Mail, Lock, Eye, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AuthPage() {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleAuth = async (isSignUp: boolean) => {
+  const handleAuth = async () => {
     setIsLoading(true);
-    const { error } = isSignUp 
+    const { error } = isSignUp
       ? await supabase.auth.signUp({ email, password })
       : await supabase.auth.signInWithPassword({ email, password });
 
@@ -24,56 +27,146 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-dark flex items-center justify-center p-6 text-white">
-      <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-10 rounded-3xl shadow-2xl">
-        <h1 className="text-3xl font-black mb-2 tracking-tight">FreelanceHub Login</h1>
-        <p className="text-brand-secondary text-sm mb-8">Enter your details to access your account.</p>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-brand-secondary mb-2">Email Address</label>
-            <input 
-              type="email" 
-              placeholder="name@company.com" 
-              className="w-full bg-brand-dark/50 border border-white/5 p-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary placeholder-white/20"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-brand-secondary mb-2">Password</label>
-            <input 
-              type="password" 
-              placeholder="••••••••" 
-              className="w-full bg-brand-dark/50 border border-white/5 p-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary placeholder-white/20"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          
-          <button 
-            onClick={() => handleAuth(false)}
-            disabled={isLoading}
-            className="w-full py-4 bg-brand-primary hover:bg-brand-secondary transition-all rounded-xl font-bold mt-4 shadow-lg active:scale-95"
+    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6 font-sans relative overflow-hidden">
+
+      {/* Animated Background Blobs */}
+      <motion.div
+        animate={{
+          scale: [1, 1.2, 1],
+          rotate: [0, 90, 0],
+          x: [0, 40, 0]
+        }}
+        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+        className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-brand-primary/10 blur-[120px] rounded-full pointer-events-none"
+      />
+      <motion.div
+        animate={{
+          scale: [1.2, 1, 1.2],
+          rotate: [90, 0, 90],
+          x: [0, -40, 0]
+        }}
+        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+        className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-purple-950/20 blur-[120px] rounded-full pointer-events-none"
+      />
+
+      {/* Main Auth Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-[440px] bg-brand-dark/95 backdrop-blur-3xl border border-white/5 p-10 rounded-[3rem] shadow-[0_40px_120px_rgba(0,0,0,0.6)] relative z-10"
+      >
+
+        {/* Navigation Tabs with Magnetic Sliding Pill */}
+        <div className="bg-black/40 p-1.5 rounded-2xl flex items-center mb-12 relative">
+          <motion.div
+            layoutId="activeTab"
+            className="absolute h-[40px] w-[calc(50%-6px)] bg-brand-primary rounded-xl shadow-[0_0_20px_rgba(82,109,130,0.5)]"
+            initial={false}
+            animate={{ x: isSignUp ? '100%' : '0%' }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          />
+
+          <button
+            onClick={() => setIsSignUp(false)}
+            className={`flex-1 relative z-10 py-3 text-[10px] font-black uppercase tracking-[2.5px] transition-colors duration-300 ${!isSignUp ? 'text-white' : 'text-brand-secondary hover:text-white'}`}
           >
-            {isLoading ? 'Processing...' : 'Sign In'}
+            Sign In
           </button>
-          
-          <div className="flex items-center gap-4 py-4">
-            <div className="h-px bg-white/10 flex-1" />
-            <span className="text-xs text-white/30 font-bold uppercase">or</span>
-            <div className="h-px bg-white/10 flex-1" />
-          </div>
-          
-          <button 
-            onClick={() => handleAuth(true)}
-            disabled={isLoading}
-            className="w-full py-4 bg-white text-brand-dark hover:bg-brand-light transition-all rounded-xl font-bold shadow-lg active:scale-95"
+          <button
+            onClick={() => setIsSignUp(true)}
+            className={`flex-1 relative z-10 py-3 text-[10px] font-black uppercase tracking-[2.5px] transition-colors duration-300 ${isSignUp ? 'text-white' : 'text-brand-secondary hover:text-white'}`}
           >
-            Create Account
+            Register
           </button>
         </div>
-      </div>
+
+        {/* Animated Form Content */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={isSignUp ? 'signup' : 'signin'}
+            initial={{ opacity: 0, filter: 'blur(20px)', scale: 0.98 }}
+            animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
+            exit={{ opacity: 0, filter: 'blur(20px)', scale: 0.98 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="flex flex-col"
+          >
+            {/* Welcome Text */}
+            <div className="text-center mb-10 h-[80px] flex flex-col justify-center">
+              <h1 className="text-4xl font-black text-white mb-2 tracking-tight">
+                {isSignUp ? 'Join the Hub' : 'Welcome Back'}
+              </h1>
+              <p className="text-brand-secondary text-sm font-medium tracking-tight px-4 leading-relaxed">
+                {isSignUp ? 'Create an account to start freelancing.' : 'Login to access your freelance portal.'}
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Email Input */}
+              <motion.div whileTap={{ scale: 0.995 }} className="space-y-2">
+                <label className="block text-[10px] font-black uppercase tracking-[2px] text-brand-secondary ml-1">Email Address</label>
+                <div className="relative group">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-secondary group-focus-within:text-brand-primary transition-colors" />
+                  <input
+                    type="email"
+                    placeholder="name@example.com"
+                    className="w-full bg-black/40 border border-white/5 py-4 pl-12 pr-4 rounded-2xl text-white font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/50 transition-all placeholder-white/20"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+              </motion.div>
+
+              {/* Password Input */}
+              <motion.div whileTap={{ scale: 0.995 }} className="space-y-2">
+                <label className="block text-[10px] font-black uppercase tracking-[2px] text-brand-secondary ml-1">{isSignUp ? 'Create Password' : 'Password'}</label>
+                <div className="relative group">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-secondary group-focus-within:text-brand-primary transition-colors" />
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    className="w-full bg-black/40 border border-white/5 py-4 pl-12 pr-12 rounded-2xl text-white font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/50 transition-all placeholder-white/20"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-secondary hover:text-white transition-colors">
+                    <Eye className="w-5 h-5" />
+                  </button>
+                </div>
+              </motion.div>
+
+              {!isSignUp && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-right">
+                  <button className="text-[10px] font-black uppercase tracking-[1px] text-brand-secondary hover:text-white transition-colors">
+                    Forgot Password?
+                  </button>
+                </motion.div>
+              )}
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleAuth}
+                disabled={isLoading}
+                className="w-full py-5 bg-brand-primary hover:bg-brand-secondary text-white rounded-2xl font-black text-sm uppercase tracking-[2px] transition-all duration-300 shadow-[0_20px_40px_-5px_rgba(82,109,130,0.5)] flex items-center justify-center gap-3 relative overflow-hidden disabled:opacity-50"
+              >
+                <span>{isLoading ? 'Processing...' : (isSignUp ? 'Register' : 'Sign In')}</span>
+                {!isLoading && <ArrowRight className="w-5 h-5" />}
+
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '100%' }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                />
+              </motion.button>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }
+
+
+
