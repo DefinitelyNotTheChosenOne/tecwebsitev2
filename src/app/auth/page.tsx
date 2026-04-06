@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Mail, Lock, Eye, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AuthPage() {
@@ -93,11 +94,14 @@ export default function AuthPage() {
           >
             {/* Welcome Text */}
             <div className="text-center mb-10 h-[80px] flex flex-col justify-center">
-              <h1 className="text-4xl font-black text-white mb-2 tracking-tight">
-                {isSignUp ? 'Join the Hub' : 'Welcome Back'}
-              </h1>
+              <Link href="/" className="inline-flex items-center justify-center gap-2 mb-4 group">
+                <h1 className="text-4xl font-black italic tracking-tighter transition-transform group-hover:scale-105 text-white">
+                  Tutor<span className="text-brand-primary">Match</span>
+                </h1>
+                <div className="w-2 h-2 rounded-full bg-brand-primary animate-pulse mt-4" />
+              </Link>
               <p className="text-brand-secondary text-sm font-medium tracking-tight px-4 leading-relaxed">
-                {isSignUp ? 'Create an account to start freelancing.' : 'Login to access your freelance portal.'}
+                {isSignUp ? 'Create an account to start tutoring.' : 'Login to access your tutoring portal.'}
               </p>
             </div>
 

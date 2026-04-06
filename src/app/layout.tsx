@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FreelanceHub | Marketplace of the Future",
-  description: "Connect with elite freelancers and scale your business.",
+  title: "TutorMatch | Global Marketplace for Elite Tutors",
+  description: "Connect with the world's most elite tutors and scale your knowledge with premium education.",
 };
 
 export default function RootLayout({

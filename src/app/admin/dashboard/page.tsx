@@ -1,23 +1,47 @@
+'use client';
 import { supabase } from '@/lib/supabase';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { 
   Shield, AlertTriangle, MessageSquare, ExternalLink, 
-  Scale, CheckCircle, PlusCircle, ArrowRight, Brain 
+  Scale, CheckCircle, PlusCircle, ArrowRight, Brain, RefreshCcw
 } from 'lucide-react';
 import AdminHeader from '@/components/AdminHeader';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 
-export default async function AdminDashboardPage() {
-  // 1. Server-Side Role Protection
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) redirect('/auth');
+export default function AdminDashboardPage() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, full_name')
-    .eq('id', session.user.id)
-    .single();
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.push('/auth');
+      } else {
+        supabase
+          .from('profiles')
+          .select('role, full_name')
+          .eq('id', session.user.id)
+          .single()
+          .then(({ data }) => {
+            setProfile(data);
+            setIsLoading(false);
+          });
+      }
+    });
+  }, [router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center text-white">
+        <RefreshCcw className="w-12 h-12 text-brand-primary animate-spin mb-4" />
+        <p className="text-xs font-black uppercase tracking-widest text-brand-secondary">Verifying High Command Credentials...</p>
+      </div>
+    );
+  }
+
 
   if (profile?.role !== 'admin') {
     return (
@@ -76,14 +100,14 @@ export default async function AdminDashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         className="flex gap-6 mb-20"
       >
-        <Link href="/services/new" className="flex-1 p-8 bg-brand-primary hover:bg-brand-secondary transition-all rounded-[2.5rem] flex items-center justify-between group shadow-2xl">
+        <Link href="/admin/subjects/new" className="flex-1 p-8 bg-brand-primary hover:bg-brand-secondary transition-all rounded-[2.5rem] flex items-center justify-between group shadow-2xl">
           <div className="flex items-center gap-6">
             <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
                <PlusCircle className="w-8 h-8 text-white group-hover:scale-110 transition-transform" />
             </div>
             <div>
-              <span className="block text-xl font-black text-white">Create New Service</span>
-              <span className="text-white/60 text-xs font-bold uppercase tracking-widest leading-none">Add Gigs to Marketplace</span>
+              <span className="block text-xl font-black text-white">Deploy Subject Market</span>
+              <span className="text-white/60 text-xs font-bold uppercase tracking-widest leading-none">Add Categories to Marketplace</span>
             </div>
           </div>
           <ArrowRight className="w-8 h-8 text-white/40 group-hover:translate-x-2 transition-transform" />
