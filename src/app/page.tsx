@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Layout, Monitor, PlusCircle, LogIn, 
-  LogOut, Star, MessageSquare, ChevronDown, Globe, ArrowRight 
+  LogOut, Star, MessageSquare, ChevronDown, 
+  Globe, ArrowRight, User 
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -39,25 +40,31 @@ export default function Home() {
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
       .from('profiles')
-      .select('full_name, role')
+      .select('full_name, role, avatar_url')
       .eq('id', userId)
       .single();
     if (data) {
       setProfile(data);
-      // SaaS Auto-Redirect: Never show the marketing page to logged-in users
-      router.push(data.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+      // SaaS Auto-Redirect REMOVED: allow landing page browsing for logged-in users
     }
   };
 
   const fetchServices = async () => {
-    const { data } = await supabase.from('services').select('*');
+    // Fetch top-rated specialists (role: seller) instead of generic services
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'seller')
+      .limit(6);
+      
     if (data && data.length > 0) setServices(data);
     else setServices(fallbackServices);
   };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    window.location.reload();
+    setSession(null);
+    setProfile(null);
   };
 
   return (
@@ -74,36 +81,14 @@ export default function Home() {
             <div className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse mt-3" />
           </Link>
 
-          {/* New High-Density Middle Nav (Hidden for Admins) */}
-          {profile?.role !== 'admin' && (
-            <div className="hidden xl:flex items-center gap-8 text-[11px] font-black uppercase tracking-[2px] text-brand-secondary/80">
-              <div className="relative group/subjects">
-                <div className="flex items-center gap-2 hover:text-white cursor-pointer transition-colors pb-4 -mb-4">
-                  Subjects <ChevronDown className="w-3 h-3 group-hover/subjects:rotate-180 transition-transform" />
-                </div>
-                
-                <div className="absolute top-full left-0 mt-6 w-64 bg-[#0f172a] border border-white/10 rounded-3xl p-3 opacity-0 invisible group-hover/subjects:opacity-100 group-hover/subjects:visible transition-all shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] flex flex-col z-[100] transform translate-y-2 group-hover/subjects:translate-y-0 before:absolute before:-top-6 before:left-0 before:w-full before:h-6 before:bg-transparent">
-                  <span className="text-[9px] text-brand-secondary font-black uppercase tracking-[3px] px-4 py-2 border-b border-white/5 mb-2 block">Top Programs</span>
-                  {['Advanced Calculus', 'Computer Science', 'Pre-Med & Nursing', 'Constitutional Law', 'Organic Chemistry', 'Physics Engineering'].map((subj) => (
-                    <Link key={subj} href={`/subjects/${subj.toLowerCase().replace(/ /g, '-')}`} className="px-4 py-3 hover:bg-white/5 rounded-xl text-xs font-bold text-white transition-colors">{subj}</Link>
-                  ))}
-                  <div className="my-2 border-t border-white/5" />
-                  <Link href="/subjects" className="px-4 py-3 bg-brand-primary/10 border border-brand-primary/20 hover:bg-brand-primary text-brand-primary hover:text-brand-dark rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-between group/view">
-                    View All <ArrowRight className="w-3 h-3 group-hover/view:translate-x-1 transition-transform" />
-                  </Link>
-                </div>
-              </div>
-              <Link href="/help-wanted" className="hover:text-white transition-colors">
-                Help Wanted
-              </Link>
-              <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
-              <div className="flex items-center gap-2 hover:text-white cursor-pointer transition-colors">
-                <Globe className="w-3.5 h-3.5" /> EN
-              </div>
-              <Link href="/services/new" className="hover:text-brand-primary transition-colors italic">Become a Tutor</Link>
-            </div>
-          )}
-
+          {/* New High-Density Middle Nav */}
+          <div className="hidden xl:flex items-center gap-8 text-[11px] font-black uppercase tracking-[2px] text-brand-secondary/80">
+            <Link href="#markets" className="hover:text-white transition-colors">Subjects</Link>
+            <Link href={session ? "/help-wanted" : "/auth?mode=signup&redirect=/help-wanted"} className="hover:text-white transition-colors">Help Wanted</Link>
+            {!session && (
+              <Link href="/auth?mode=signup&redirect=/dashboard" className="text-brand-primary/60 hover:text-brand-primary transition-colors italic">Become a Tutor</Link>
+            )}
+          </div>
         </motion.div>
         
         <div className="flex items-center gap-10">
@@ -127,41 +112,28 @@ export default function Home() {
                 className="flex items-center gap-6"
               >
                 <Link 
-                  href={profile?.role === 'admin' ? "/admin/dashboard" : "/dashboard"}
-                  className="flex flex-col items-end mr-2 hover:opacity-70 transition-opacity cursor-pointer group"
+                  href="/dashboard"
+                  className="flex items-center gap-4 hover:opacity-70 transition-opacity cursor-pointer group bg-white/5 border border-white/10 p-2 pr-6 rounded-full"
                 >
-                   <span className="text-[10px] font-black text-brand-primary uppercase tracking-widest leading-none mb-1 flex items-center gap-2">
-                     Welcome back <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                   </span>
-                   <span className="text-sm font-bold text-white tracking-tight">{profile?.full_name || 'User'}</span>
+                   <div className="w-10 h-10 rounded-full bg-brand-primary/20 border border-brand-primary/40 flex items-center justify-center overflow-hidden">
+                      {profile?.avatar_url ? (
+                        <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-sm font-black text-brand-primary">{profile?.full_name?.charAt(0)}</span>
+                      )}
+                   </div>
+                   <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-brand-primary uppercase tracking-widest leading-none mb-1">Authenticated</span>
+                      <span className="text-sm font-bold text-white tracking-tight">{profile?.full_name || 'Specialist'}</span>
+                   </div>
                 </Link>
 
-                <div className="flex items-center gap-4">
-                  <Link href="/support" className="flex items-center gap-2 text-brand-secondary hover:text-white transition-colors group relative pr-4">
-                    <MessageSquare className="w-5 h-5 group-hover:scale-110 transition-transform" /> 
-                    <span className="hidden lg:inline">Customer Support</span>
-                    {supportThreadCount > 0 && (
-                      <AnimatePresence>
-                        <motion.div 
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="absolute -top-1.5 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-lg border border-[#0f172a]"
-                        >
-                          {supportThreadCount >= 10 ? '9+' : supportThreadCount}
-                        </motion.div>
-                      </AnimatePresence>
-                    )}
-                  </Link>
-                  <div className="h-4 w-px bg-white/10" />
-                  <Link href="/services/new" className="flex items-center gap-2 text-brand-secondary hover:text-white transition-colors group">
-                    <PlusCircle className="w-5 h-5 group-hover:scale-110 transition-transform" /> Post Service
-                  </Link>
-                  <div className="h-4 w-px bg-white/10" />
+                <div className="flex items-center gap-6">
                   <button 
                     onClick={handleSignOut}
-                    className="flex items-center gap-2 text-red-400/70 hover:text-red-400 transition-colors"
+                    className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400/70 hover:bg-red-500 hover:text-white transition-all shadow-lg active:scale-90"
                   >
-                    <LogOut className="w-5 h-5" /> Sign Out
+                    <LogOut className="w-5 h-5" />
                   </button>
                 </div>
               </motion.div>
@@ -173,14 +145,6 @@ export default function Home() {
       {/* Hero Section */}
       <header className="relative h-screen flex flex-col justify-center items-center px-10 text-center overflow-hidden shrink-0 pb-20">
         <div className="max-w-4xl mx-auto text-center relative z-10 -mt-32">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1 }}
-            className="inline-block px-5 py-2 bg-white/5 border border-white/5 backdrop-blur-xl rounded-full mb-10"
-          >
-            <span className="text-[10px] font-black uppercase tracking-[4px] text-brand-secondary/80">The Future of Tutoring</span>
-          </motion.div>
           <motion.h1 
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
@@ -199,8 +163,8 @@ export default function Home() {
         </div>
       </header>
       
-      {/* Services Grid with Scroll Reveal */}
-      <main className="px-10 pb-40 relative z-10 pt-10">
+      {/* Academic Market Grid with Scroll Reveal */}
+      <main id="markets" className="px-10 pb-40 relative z-10 pt-10">
         <motion.div
           initial={{ opacity: 0, y: 100 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -209,9 +173,13 @@ export default function Home() {
           className="max-w-7xl mx-auto"
         >
           <div className="flex items-center justify-between mb-16 px-4">
-            <h2 className="text-3xl font-black flex items-center gap-4 uppercase tracking-tighter">
-              <Layout className="text-brand-primary w-8 h-8" /> Top Rated <span className="text-brand-primary italic">Tutors</span>
+            <h2 className="text-4xl font-black flex flex-col uppercase tracking-tighter italic leading-none">
+              <span className="text-brand-primary not-italic text-[10px] tracking-[5px] mb-2">Institutional Mastery</span>
+              Browse Academic <span className="text-brand-primary">Markets</span>
             </h2>
+            <Link href="/subjects" className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
+               View Full Directory
+            </Link>
           </div>
 
           <motion.div 
@@ -228,36 +196,31 @@ export default function Home() {
             }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
           >
-          {services.map((service, i) => (
-            <motion.div 
-              key={i}
-              variants={{
-                hidden: { opacity: 0, scale: 0.9, y: 20 },
-                show: { opacity: 1, scale: 1, y: 0 }
-              }}
-              whileHover={{ y: -10, transition: { duration: 0.2 } }}
-              className="bg-white/5 border border-white/5 rounded-[2.5rem] p-4 group hover:bg-white/[0.08] transition-all cursor-pointer relative overflow-hidden flex flex-col"
-            >
-              <div className="h-56 bg-brand-dark rounded-[2rem] mb-6 flex items-center justify-center overflow-hidden border border-white/5">
-                 <Monitor className="w-16 h-16 text-brand-primary opacity-20" />
-              </div>
-              
-              <div className="px-4 pb-4 flex-1 flex flex-col">
-                <span className="text-[10px] font-black uppercase text-brand-primary tracking-[2px] mb-2 block">{service.category}</span>
-                <h3 className="text-2xl font-bold mb-4 line-clamp-2 leading-tight tracking-tight group-hover:text-brand-primary transition-colors">{service.title}</h3>
+          {fallbackSubjects.map((sub, i) => (
+            <Link key={i} href={session ? `/subjects/${sub.slug}` : `/auth?redirect=/subjects/${sub.slug}`}>
+              <motion.div 
+                variants={{
+                  hidden: { opacity: 0, scale: 0.9, y: 20 },
+                  show: { opacity: 1, scale: 1, y: 0 }
+                }}
+                whileHover={{ y: -10, transition: { duration: 0.2 } }}
+                className="bg-white/5 border border-white/5 rounded-[3rem] p-10 group hover:bg-white/[0.08] transition-all cursor-pointer relative overflow-hidden flex flex-col h-[380px]"
+              >
+                <div className="w-16 h-16 bg-brand-dark rounded-2xl flex items-center justify-center mb-10 border border-white/5 group-hover:bg-brand-primary transition-all">
+                   <Layout className="w-8 h-8 text-brand-primary opacity-50 group-hover:opacity-100 group-hover:text-brand-dark transition-all" />
+                </div>
                 
-                <div className="mt-auto pt-6 border-t border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 text-brand-primary fill-brand-primary" />
-                    <span className="font-bold text-sm">4.9</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="block text-[10px] font-black text-brand-secondary tracking-widest uppercase mb-1">Starting At</span>
-                    <span className="text-2xl font-black italic">₱{service.price ?? '49'}</span>
+                <div className="flex-1 flex flex-col">
+                  <h3 className="text-3xl font-black italic mb-4 leading-tight tracking-tighter group-hover:text-brand-primary transition-colors uppercase">{sub.name}</h3>
+                  <p className="text-sm font-medium text-zinc-500 uppercase tracking-widest mb-10">{sub.desc || 'Specialist Mentoring'}</p>
+                  
+                  <div className="mt-auto pt-8 border-t border-white/5 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-brand-secondary group-hover:text-white transition-colors">Enter Market</span>
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform text-brand-primary" />
                   </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </Link>
           ))}
         </motion.div>
       </motion.div>
@@ -265,6 +228,15 @@ export default function Home() {
   </div>
   );
 }
+
+const fallbackSubjects = [
+  { name: 'Advanced Calculus', slug: 'advanced-calculus', desc: 'Precision Mathematical Mastery' },
+  { name: 'Computer Science', slug: 'computer-science', desc: 'Elite Algorithmic Engineering' },
+  { name: 'Pre-Med & Nursing', slug: 'pre-med-nursing', desc: 'Clinical Excellence Hub' },
+  { name: 'Constitutional Law', slug: 'constitutional-law', desc: 'Civil Rights & Legal Theory' },
+  { name: 'Organic Chemistry', slug: 'organic-chemistry', desc: 'Atomic Design & Mechanisms' },
+  { name: 'Physics & Engineering', slug: 'physics-engineering', desc: 'Universal Mechanics & Synthesis' },
+];
 
 const fallbackServices = [
   { title: "Advanced Calculus & Linear Algebra Mentoring", category: "Mathematics", price: 45 },

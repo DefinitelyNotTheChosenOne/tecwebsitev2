@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
-import { Layout, ArrowRight } from 'lucide-react';
+import { Layout, ArrowRight, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SubjectDirectory() {
@@ -30,23 +30,30 @@ export default function SubjectDirectory() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white font-sans">
-      <div className="pt-32 pb-20 px-10 text-center max-w-4xl mx-auto">
+    <div className="min-h-screen bg-[#0f172a] text-white font-sans relative overflow-hidden">
+      {/* Dynamic Background Glows */}
+      <div className="fixed inset-0 pointer-events-none opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900 via-transparent to-transparent blur-3xl animate-pulse" />
+
+      <div className="pt-12 pb-20 px-10 text-center max-w-4xl mx-auto relative z-10">
+         <Link href="/" className="inline-flex items-center gap-2 text-brand-secondary hover:text-brand-primary transition-all uppercase text-[10px] font-black tracking-[4px] group mb-12">
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-2 transition-transform" /> Go back to Main Page
+         </Link>
+         <br />
          <motion.div
            initial={{ opacity: 0, scale: 0.8 }}
            animate={{ opacity: 1, scale: 1 }}
            className="inline-block px-5 py-2 bg-white/5 border border-white/5 backdrop-blur-xl rounded-full mb-10"
          >
-           <span className="text-[10px] font-black uppercase tracking-[4px] text-brand-primary">Subject Directory</span>
+           <span className="text-[10px] font-black uppercase tracking-[4px] text-brand-primary italic">Academic Subject Directory</span>
          </motion.div>
          <motion.h1 
            initial={{ opacity: 0, y: 40 }}
            animate={{ opacity: 1, y: 0 }}
-           className="text-6xl font-black mb-8 tracking-tighter"
+           className="text-6xl md:text-7xl font-black mb-8 tracking-tighter italic leading-[0.9]"
          >
-           Browse Academic Markets
+           Browse Academic <span className="text-brand-primary block not-italic">Markets</span>
          </motion.h1>
-         <p className="text-brand-secondary max-w-xl mx-auto text-lg">Select a specific discipline to browse verified elite tutors or post a direct "Help Wanted" request.</p>
+         <p className="text-brand-secondary max-w-xl mx-auto text-sm uppercase tracking-[4px] font-medium">Select a specific discipline to discover verified elite tutors</p>
       </div>
 
       <main className="max-w-7xl mx-auto px-10 pb-40">

@@ -1,13 +1,17 @@
 'use client';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
-import { Mail, Lock, Eye, ArrowRight, ArrowLeft, User } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Mail, Lock, Eye, ArrowRight, ArrowLeft, User, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AuthPage() {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect');
+  const mode = searchParams.get('mode');
+
+  const [isSignUp, setIsSignUp] = useState(mode === 'signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -16,20 +20,24 @@ export default function AuthPage() {
 
   const handleAuth = async () => {
     setIsLoading(true);
-    const { error } = isSignUp
+    const { data: { user }, error } = isSignUp
       ? await supabase.auth.signUp({ 
           email, 
           password,
           options: {
             data: { full_name: fullName }
           }
-        })
+        }).then(res => ({ data: { user: res.data.user }, error: res.error }))
       : await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       alert(error.message);
     } else {
-      router.push('/');
+      // If a redirect param exists, go there with a confirmation flag. Otherwise go to dashboard.
+      const destination = redirect 
+        ? `${redirect}${redirect.includes('?') ? '&' : '?'}redirected=true` 
+        : '/dashboard';
+      router.push(destination);
     }
     setIsLoading(false);
   };
