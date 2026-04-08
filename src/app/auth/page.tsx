@@ -1,12 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mail, Lock, Eye, ArrowRight, ArrowLeft, User, RefreshCcw } from 'lucide-react';
+import { Mail, Lock, Eye, ArrowRight, ArrowLeft, User } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function AuthPage() {
+function AuthContent() {
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect');
   const mode = searchParams.get('mode');
@@ -33,7 +33,6 @@ export default function AuthPage() {
     if (error) {
       alert(error.message);
     } else {
-      // If a redirect param exists, go there with a confirmation flag. Otherwise go to dashboard.
       const destination = redirect 
         ? `${redirect}${redirect.includes('?') ? '&' : '?'}redirected=true` 
         : '/dashboard';
@@ -44,9 +43,6 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6 font-sans relative overflow-hidden text-white">
-      
-
-      {/* Animated Background Blobs */}
       <motion.div
         animate={{
           scale: [1, 1.2, 1],
@@ -66,15 +62,12 @@ export default function AuthPage() {
         className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-purple-950/20 blur-[120px] rounded-full pointer-events-none"
       />
 
-      {/* Main Auth Card */}
       <motion.div
         initial={{ opacity: 0, y: 40, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-[440px] bg-brand-dark/95 backdrop-blur-3xl border border-white/5 p-10 rounded-[3rem] shadow-[0_40px_120px_rgba(0,0,0,0.6)] relative z-10"
       >
-
-        {/* Navigation Tabs with Magnetic Sliding Pill */}
         <div className="bg-black/40 p-1.5 rounded-2xl flex items-center mb-12 relative">
           <motion.div
             layoutId="activeTab"
@@ -98,7 +91,6 @@ export default function AuthPage() {
           </button>
         </div>
 
-        {/* Animated Form Content */}
         <AnimatePresence mode="wait">
           <motion.div
             key={isSignUp ? 'signup' : 'signin'}
@@ -108,7 +100,6 @@ export default function AuthPage() {
             transition={{ duration: 0.25, ease: "easeInOut" }}
             className="flex flex-col"
           >
-            {/* Welcome Text */}
             <div className="text-center mb-10 h-[80px] flex flex-col justify-center">
               <Link href="/" className="inline-flex items-center justify-center gap-2 mb-4 group">
                 <h1 className="text-4xl font-black italic tracking-tighter transition-transform group-hover:scale-105 text-white">
@@ -122,7 +113,6 @@ export default function AuthPage() {
             </div>
 
             <div className="space-y-6">
-              {/* Full Name Input (Registration Only) */}
               <AnimatePresence>
                 {isSignUp && (
                   <motion.div 
@@ -147,7 +137,6 @@ export default function AuthPage() {
                 )}
               </AnimatePresence>
 
-              {/* Email Input */}
               <motion.div whileTap={{ scale: 0.995 }} className="space-y-2">
                 <label className="block text-[10px] font-black uppercase tracking-[2px] text-brand-secondary ml-1">Email Address</label>
                 <div className="relative group">
@@ -162,7 +151,6 @@ export default function AuthPage() {
                 </div>
               </motion.div>
 
-              {/* Password Input */}
               <motion.div whileTap={{ scale: 0.995 }} className="space-y-2">
                 <label className="block text-[10px] font-black uppercase tracking-[2px] text-brand-secondary ml-1">{isSignUp ? 'Create Password' : 'Password'}</label>
                 <div className="relative group">
@@ -174,7 +162,7 @@ export default function AuthPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
-                  <button className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-secondary hover:text-white transition-colors">
+                  <button className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-secondary hover:text-white transition-colors" onClick={() => {}}>
                     <Eye className="w-5 h-5" />
                   </button>
                 </div>
@@ -206,7 +194,6 @@ export default function AuthPage() {
                 />
               </motion.button>
 
-              {/* Back to Home Link - Solidly centered below main action */}
               <div className="pt-4 flex justify-center">
                  <Link 
                    href="/" 
@@ -224,5 +211,14 @@ export default function AuthPage() {
   );
 }
 
-
-
+export default function AuthPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white font-black italic uppercase tracking-widest animate-pulse text-center">
+        Securely handshaking...
+      </div>
+    }>
+      <AuthContent />
+    </Suspense>
+  );
+}
