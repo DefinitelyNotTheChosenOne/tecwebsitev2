@@ -97,6 +97,7 @@ const ChatInput = ({ value, onChange, onSend, placeholder }: any) => (
 );
 
 export default function SessionPage() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -438,8 +439,6 @@ export default function SessionPage() {
   );
 
   const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.subject.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="h-screen bg-white font-sans flex overflow-hidden">

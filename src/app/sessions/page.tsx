@@ -95,6 +95,7 @@ const ChatInput = ({ value, onChange, onSend, placeholder }: any) => (
 // ─── Main Component ─────────────────────────────────────────────────
 export default function StudentSessionsPage() {
   const router = useRouter();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
@@ -407,8 +408,6 @@ export default function StudentSessionsPage() {
       </div>
     </div>
   );
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="h-screen bg-white font-sans flex overflow-hidden">
