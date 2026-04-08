@@ -5,7 +5,7 @@ import {
   ChevronLeft, Send, MessageSquare, CalendarDays,
   Clock, User, CheckCircle2, Zap, BookOpen,
   Lock, AlertTriangle, Users, MessageCircle, Search,
-  Filter, MoreVertical, Star, Shield
+  Filter, MoreVertical, Star, Shield, Wifi
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -125,6 +125,9 @@ export default function SessionPage() {
 
   const discBottomRef = useRef<HTMLDivElement>(null);
   const classBottomRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<any>(null);
+  const [isStudentTyping, setIsStudentTyping] = useState(false);
+  const typingTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -153,10 +156,16 @@ export default function SessionPage() {
         .select(`student_id, help_requests (subject)`)
         .eq('tutor_id', userId);
 
+      const { data: schedules } = await supabase
+        .from('scheduled_classes')
+        .select('*')
+        .eq('tutor_id', userId);
+
       // Map rooms to StudentProfile objects
       const studentList = (rooms || []).map((room: any) => {
         const session = sessData?.find(s => s.student_id === room.student_id);
         const name = (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.full_name || 'Anonymous Student';
+        const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
         
         return {
           id: room.student_id,
@@ -166,12 +175,24 @@ export default function SessionPage() {
           initial: name.charAt(0).toUpperCase(),
           lastMsg: '...', 
           status: 'active',
-          lastActive: 'Just now'
-        } as StudentProfile;
+          lastActive: 'Just now',
+          schedules: roomSchedules
+        } as any;
       });
 
       setStudents(studentList);
-      if (studentList.length > 0 && !selectedStudent) setSelectedStudent(studentList[0]);
+      
+      // Critical Fix: Sync the selected student with the fresh data (including schedules)
+      if (studentList.length > 0) {
+        if (!selectedStudent) {
+          setSelectedStudent(studentList[0]);
+        } else {
+          const fresh = studentList.find(s => s.id === selectedStudent.id);
+          if (fresh) setSelectedStudent(fresh);
+        }
+      }
+      
+      setSlots(schedules || []);
       setLoading(false);
     } catch (err) {
       console.error('Error:', err);
@@ -182,14 +203,15 @@ export default function SessionPage() {
   useEffect(() => {
     if (!selectedStudent?.roomId) return;
     const fetchMsgs = async () => {
-      const { data } = await supabase
+      // Discussion Messages
+      const { data: dData } = await supabase
         .from('chat_messages')
         .select('*')
         .eq('room_id', selectedStudent.roomId)
         .order('created_at', { ascending: true });
 
-      if (data) {
-        const mapped: Message[] = data.map((m: any) => ({
+      if (dData) {
+        const mapped = dData.map((m: any) => ({
           id: m.id,
           sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
           text: m.content,
@@ -197,24 +219,86 @@ export default function SessionPage() {
         }));
         setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: mapped }));
       }
+
+      // Live Class Messages
+      const { data: cData } = await supabase
+        .from('live_class_messages')
+        .select('*')
+        .eq('room_id', selectedStudent.roomId)
+        .order('created_at', { ascending: true });
+
+      if (cData) {
+        const mapped = cData.map((m: any) => ({
+          id: m.id,
+          sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
+          text: m.content,
+          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }));
+        setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: mapped }));
+      }
     };
     fetchMsgs();
 
-    const channel = supabase
-      .channel(`room-${selectedStudent.roomId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${selectedStudent.roomId}` }, (payload) => {
+    const channel = supabase.channel(`room-${selectedStudent.roomId}`);
+    channelRef.current = channel;
+
+    channel
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
         const m = payload.new as any;
-        const msg: Message = {
-          id: m.id,
-          sender: m.sender_id === currentUser?.id ? 'tutor' : 'student',
-          text: m.content,
-          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), msg] }));
+        if (m.room_id !== selectedStudent.roomId) return;
+        setAllDiscMsgs(prev => {
+          const studentMsgs = prev[selectedStudent.id] || [];
+          if (studentMsgs.some(existing => existing.id === m.id)) return prev;
+          const msg: Message = {
+            id: m.id,
+            sender: m.sender_id === currentUser?.id ? 'tutor' : 'student',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          return { ...prev, [selectedStudent.id]: [...studentMsgs, msg] };
+        });
       })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload) => {
+        const m = payload.new as any;
+        if (m.room_id !== selectedStudent.roomId) return;
+        setAllClassMsgs(prev => {
+          const studentMsgs = prev[selectedStudent.id] || [];
+          if (studentMsgs.some(existing => existing.id === m.id)) return prev;
+          const msg: Message = {
+            id: m.id,
+            sender: m.sender_id === currentUser?.id ? 'tutor' : 'student',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          return { ...prev, [selectedStudent.id]: [...studentMsgs, msg] };
+        });
+      })
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const otherTyping = Object.values(state).flat().some((u: any) => u.user_id !== currentUser?.id && u.typing);
+        setIsStudentTyping(otherTyping);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: currentUser?.id, typing: false });
+        }
+      });
+
+    return () => { 
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      supabase.removeChannel(channel); 
+      channelRef.current = null;
+    };
   }, [selectedStudent, currentUser]);
+
+  const handleTyping = () => {
+    if (!channelRef.current) return;
+    channelRef.current.track({ user_id: currentUser?.id, typing: true });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      channelRef.current?.track({ user_id: currentUser?.id, typing: false });
+    }, 2000);
+  };
 
   useEffect(() => { 
     discBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); 
@@ -224,21 +308,47 @@ export default function SessionPage() {
     classBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); 
   }, [classMsgs.length]);
 
+  const getActiveSlot = () => {
+    if (!selectedStudent) return null;
+    const studentSchedules = (selectedStudent as any).schedules || [];
+    return studentSchedules.find((s: any) => {
+      const start = toDate(s.class_date, s.start_time);
+      const end = toDate(s.class_date, s.end_time);
+      return now >= start && now <= end;
+    });
+  };
+
   const isClassLocked = () => {
-    if (!selectedStudent || !lawrenceSlot) return true;
-    const start = toDate(lawrenceSlot.date, lawrenceSlot.startTime), end = toDate(lawrenceSlot.date, lawrenceSlot.endTime);
-    return now < start || now > end;
+    return !getActiveSlot();
   };
 
   const getCountdown = () => {
-    if (!selectedStudent || !lawrenceSlot) return '';
-    const start = toDate(lawrenceSlot.date, lawrenceSlot.startTime), diff = start.getTime() - now.getTime();
+    if (!selectedStudent) return '';
+    const studentSchedules = (selectedStudent as any).schedules || [];
+    const next = studentSchedules.find((s: any) => toDate(s.class_date, s.start_time) > now);
+    if (!next) return '';
+    const start = toDate(next.class_date, next.start_time), diff = start.getTime() - now.getTime();
     if (diff <= 0) return '';
     const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000), s = Math.floor((diff%60000)/1000);
     return h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
   };
 
-  const isClassEnded = () => selectedStudent && lawrenceSlot && now > toDate(lawrenceSlot.date, lawrenceSlot.endTime);
+  const isClassEnded = () => {
+    if (!selectedStudent) return false;
+    const studentSchedules = (selectedStudent as any).schedules || [];
+    const last = studentSchedules.length > 0 ? studentSchedules[studentSchedules.length - 1] : null;
+    return last && now > toDate(last.class_date, last.end_time);
+  };
+
+  const getTimeLeft = () => {
+    const slot = getActiveSlot();
+    if (!slot) return '00:00';
+    const end = toDate(slot.class_date, slot.end_time);
+    const diff = end.getTime() - now.getTime();
+    if (diff <= 0) return '00:00';
+    const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000), s = Math.floor((diff%60000)/1000);
+    return h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const scheduleClass = async () => {
     if (!formDate || !formStart || !formEnd || !selectedStudent) return;
@@ -268,16 +378,57 @@ export default function SessionPage() {
   };
 
   const sendDiscMsg = async () => {
-    if (!discInput.trim() || !selectedStudent?.roomId) return;
-    const content = discInput.trim(); setDiscInput('');
-    await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser?.id, content });
+    if (!discInput.trim() || !selectedStudent?.roomId || !currentUser) return;
+    const content = discInput.trim(); 
+    setDiscInput('');
+
+    // Optimistic Update
+    const optimisticId = Math.floor(Math.random() * 1000000);
+    const optimisticMsg: Message = {
+      id: optimisticId,
+      sender: 'tutor',
+      text: content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optimisticMsg] }));
+
+    const { error } = await supabase.from('chat_messages').insert({ 
+      room_id: selectedStudent.roomId, 
+      sender_id: currentUser.id, 
+      content 
+    });
+
+    if (error) {
+       console.error("Signal Failed:", error.message);
+       setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== optimisticId) }));
+    }
   };
 
-  const sendClassMsg = () => {
-    if (!classInput.trim() || isClassLocked() || !selectedStudent) return;
-    const msg: Message = { id: Date.now(), sender: 'tutor', text: classInput.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
-    setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), msg] }));
+  const sendClassMsg = async () => {
+    if (!classInput.trim() || isClassLocked() || !selectedStudent || !currentUser) return;
+    const content = classInput.trim(); 
     setClassInput('');
+
+    // Optimistic Update
+    const optId = Math.floor(Math.random() * 1000000);
+    const optMsg: Message = {
+      id: optId,
+      sender: 'tutor',
+      text: content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optMsg] }));
+
+    const { error } = await supabase.from('live_class_messages').insert({
+      room_id: selectedStudent.roomId,
+      sender_id: currentUser.id,
+      content
+    });
+
+    if (error) {
+      console.error("Signal Failed:", error.message);
+      setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== optId) }));
+    }
   };
 
   if (loading) return (
@@ -348,9 +499,24 @@ export default function SessionPage() {
               <motion.div key="d" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col max-w-4xl mx-auto px-8 pt-8 pb-4">
                 <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                   {discMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
+                  {isStudentTyping && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2 items-center text-[10px] font-black uppercase tracking-widest text-slate-300 italic ml-11">
+                      <div className="flex gap-1">
+                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                      {selectedStudent?.name} is manifesting a response...
+                    </motion.div>
+                  )}
                   <div ref={discBottomRef} />
                 </div>
-                <ChatInput value={discInput} onChange={setDiscInput} onSend={sendDiscMsg} placeholder="Negotiate timing..." />
+                <ChatInput 
+                  value={discInput} 
+                  onChange={(val: string) => { setDiscInput(val); handleTyping(); }} 
+                  onSend={sendDiscMsg} 
+                  placeholder="Negotiate timing..." 
+                />
               </motion.div>
             )}
 
@@ -360,9 +526,36 @@ export default function SessionPage() {
                   <h2 className="text-2xl font-black uppercase italic tracking-tighter text-brand-dark">Schedule {selectedStudent?.name || 'Session'}</h2>
                   {conflictError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold">{conflictError}</div>}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">Date</p><input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="w-full bg-slate-50 border p-4 rounded-xl outline-none focus:border-brand-primary" /></div>
-                    <div className="space-y-2"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">Start Time</p><input type="time" value={formStart} onChange={e => setFormStart(e.target.value)} className="w-full bg-slate-50 border p-4 rounded-xl outline-none focus:border-brand-primary" /></div>
-                    <div className="space-y-2"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">End Time</p><input type="time" value={formEnd} onChange={e => setFormEnd(e.target.value)} className="w-full bg-slate-50 border p-4 rounded-xl outline-none focus:border-brand-primary" /></div>
+                    <div className="space-y-2">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">Date</p>
+                       <input 
+                         type="date" 
+                         value={formDate} 
+                         onChange={e => setFormDate(e.target.value)} 
+                         onClick={(e) => (e.currentTarget as any).showPicker()}
+                         className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary cursor-pointer hover:bg-slate-100/50 transition-all font-bold text-sm" 
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">Start Time</p>
+                       <input 
+                         type="time" 
+                         value={formStart} 
+                         onChange={e => setFormStart(e.target.value)} 
+                         onClick={(e) => (e.currentTarget as any).showPicker()}
+                         className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary cursor-pointer hover:bg-slate-100/50 transition-all font-bold text-sm" 
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">End Time</p>
+                       <input 
+                         type="time" 
+                         value={formEnd} 
+                         onChange={e => setFormEnd(e.target.value)} 
+                         onClick={(e) => (e.currentTarget as any).showPicker()}
+                         className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary cursor-pointer hover:bg-slate-100/50 transition-all font-bold text-sm" 
+                       />
+                    </div>
                   </div>
                   <button onClick={scheduleClass} className="w-full md:w-auto px-10 py-5 bg-brand-dark text-white rounded-2xl font-black uppercase tracking-[3px] hover:bg-brand-primary hover:text-brand-dark transition-all shadow-xl">Lock Schedule</button>
                 </div>
@@ -404,6 +597,28 @@ export default function SessionPage() {
                   </div>
                 ) : (
                   <div className="h-full flex flex-col max-w-4xl mx-auto w-full">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-4 mb-6 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                          <Wifi className="w-5 h-5 text-emerald-500 animate-pulse" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Session Live</p>
+                          <p className="text-sm font-black text-brand-dark uppercase italic">{selectedStudent?.name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/50 mb-0.5">Time Limit</p>
+                          <p className="text-xs font-bold text-emerald-700">{fmtTime(getActiveSlot()?.start_time || '00:00')} - {fmtTime(getActiveSlot()?.end_time || '00:00')}</p>
+                        </div>
+                        <div className="h-8 w-px bg-emerald-200" />
+                        <div className="text-right min-w-[80px]">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/50 mb-0.5">Ending In</p>
+                          <p className="text-xl font-black text-emerald-700 font-mono tracking-tighter">{getTimeLeft()}</p>
+                        </div>
+                      </div>
+                    </div>
                     <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                       {classMsgs.length === 0 && <div className="py-20 text-center text-slate-300 font-black uppercase tracking-[3px] italic">Live Stream Active: No data manifest yet...</div>}
                       {classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}

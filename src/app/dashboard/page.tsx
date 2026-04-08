@@ -6,7 +6,8 @@ import {
   ShoppingBag, MessageSquare, Heart, Clock, 
   ChevronRight, Shield, HelpCircle, Send, 
   FileText, LogOut, User, ShieldCheck,
-  BookOpen, RefreshCcw, Search, ExternalLink, Zap
+  BookOpen, RefreshCcw, Search, ExternalLink, Zap,
+  MessageCircle, CheckCircle2, CalendarDays
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,47 +16,49 @@ export default function UserDashboard() {
   const router = useRouter();
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [isTutor, setIsTutor] = useState(false);
   const [loading, setLoading] = useState(true);
   const [completedSessions, setCompletedSessions] = useState<any[]>([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [myRequests, setMyRequests] = useState<any[]>([]);
-  const [incomingBids, setIncomingBids] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      setSession(currentSession);
-      if (currentSession) {
-        supabase.from('profiles').select('*').eq('id', currentSession.user.id).single()
-          .then(({ data }) => {
-            if (data?.role === 'admin') router.push('/admin/dashboard');
-            setProfile(data);
-            setLoading(false);
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        setProfile(data);
+        setIsTutor(data?.role === 'seller');
+        fetchNotifications(user.id);
+        subscribeToSignals(user.id);
+        
+        if (data?.role === 'admin') router.push('/admin/dashboard');
+        
+        if (data?.role === 'seller' && data?.skills?.length > 0) {
+          supabase.from('help_requests')
+            .select('*, student:profiles(full_name)')
+            .eq('status', 'open')
+            .in('subject', data.skills)
+            .limit(3)
+            .then(({ data: matches }) => {
+              setRecommendations(matches || []);
+            });
+        }
 
-            if (data?.role === 'seller' && data?.skills?.length > 0) {
-              supabase.from('help_requests')
-                .select('*, student:profiles(full_name)')
-                .eq('status', 'open')
-                .in('subject', data.skills)
-                .limit(3)
-                .then(({ data: matches }) => {
-                  setRecommendations(matches || []);
-                });
-            }
-
-            if (data?.role === 'user') {
-               supabase.from('help_requests')
-                 .select('*')
-                 .eq('student_id', currentSession.user.id)
-                 .then(({ data: reqs }) => {
-                    setMyRequests(reqs || []);
-                 });
-            }
-          });
+        if (data?.role === 'user') {
+           supabase.from('help_requests')
+             .select('*')
+             .eq('student_id', user.id)
+             .then(({ data: reqs }) => {
+                setMyRequests(reqs || []);
+             });
+        }
         
         supabase.from('tutoring_sessions')
           .select('*')
-          .or(`tutor_id.eq.${currentSession.user.id},student_id.eq.${currentSession.user.id}`)
+          .or(`tutor_id.eq.${user.id},student_id.eq.${user.id}`)
           .eq('status', 'completed')
           .then(({ data }) => {
             setCompletedSessions(data || []);
@@ -65,15 +68,34 @@ export default function UserDashboard() {
       } else {
         router.push('/auth');
       }
-    });
+      setLoading(false);
+    };
+    fetchProfile();
   }, [router]);
+
+  const fetchNotifications = async (uid: string) => {
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (data) setNotifications(data);
+  };
+
+  const subscribeToSignals = (uid: string) => {
+    supabase
+      .channel(`signals-${uid}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, (payload) => {
+        setNotifications(prev => [payload.new, ...prev].slice(0, 10));
+      })
+      .subscribe();
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/');
   };
-
-  const isTutor = profile?.role === 'seller';
 
   if (loading) return (
     <div className="min-h-screen bg-brand-dark flex items-center justify-center">
@@ -90,11 +112,11 @@ export default function UserDashboard() {
         
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between md:items-center gap-6 relative z-10">
           <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
-            <p className="text-[9px] font-black uppercase tracking-[4px] text-brand-primary mb-1.5 opacity-80">Operational Command</p>
+            <p className="text-[9px] font-black uppercase tracking-[4px] text-brand-primary mb-1.5 opacity-80">My TutorMatch</p>
             <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-white italic uppercase leading-[0.9] mb-4">
-              {isTutor ? 'Specialist' : 'Agent'} <span className="text-brand-primary block not-italic">Dashboard</span>
+              {profile?.full_name?.split(' ')[0] || (isTutor ? 'Specialist' : 'Agent')} <span className="text-brand-primary block not-italic">Dashboard</span>
             </h1>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 mt-4">
                <div className="px-4 py-1.5 bg-white/5 border border-white/10 rounded-xl backdrop-blur-xl flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                   <span className="text-[8px] font-black uppercase tracking-[2px] text-white/50">
@@ -253,22 +275,61 @@ export default function UserDashboard() {
           <div className="lg:col-span-4 space-y-8">
             
             {/* Recent Messages Area - Dynamic & Premium */}
-            <div className="bg-brand-dark rounded-[3.5rem] p-10 text-white relative overflow-hidden shadow-2xl">
-               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-primary/50 to-transparent opacity-50" />
-               <div className="flex items-center justify-between mb-10">
-                  <h3 className="text-[10px] font-black uppercase tracking-[5px] text-brand-primary flex items-center gap-3">
-                    <MessageSquare className="w-4 h-4 animate-bounce" /> Signals
-                  </h3>
-                  <span className="text-[8px] font-black text-white/30 tracking-[2px] uppercase">Live-Stream enabled</span>
-               </div>
-               
-               <div className="space-y-6">
-                  {/* Empty state for realism until messages connect */}
-                  <div className="py-12 text-center border border-dashed border-white/5 rounded-[2rem]">
-                     <div className="w-3 h-3 bg-brand-primary/20 rounded-full mx-auto mb-3 animate-ping" />
-                     <p className="text-[9px] font-black uppercase tracking-[3px] text-white/20">Scanning bandwidth...</p>
+            <div className={`bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 flex flex-col h-[480px] transition-all`}>
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-500/10 rounded-lg">
+                    <Zap className="w-5 h-5 text-blue-400" />
                   </div>
-               </div>
+                  <span className="text-[10px] font-black uppercase tracking-[3px] text-white/60">Intelligence Signals</span>
+                </div>
+                {notifications.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Live Feed</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scroll">
+                {notifications.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-20">
+                    <div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+                    <p className="text-[10px] font-black uppercase tracking-[4px] text-white">Scanning Bandwidth...</p>
+                    <div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+                  </div>
+                ) : (
+                  <AnimatePresence mode="popLayout">
+                    {notifications.map((notif) => (
+                      <motion.div 
+                        key={notif.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all cursor-pointer group"
+                        onClick={() => notif.link && router.push(notif.link)}
+                      >
+                         <div className="flex items-start gap-4">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              notif.type === 'MESSAGE' ? 'bg-blue-500/20' : 
+                              notif.type === 'ACCEPTED' ? 'bg-emerald-500/20' : 'bg-amber-500/20'
+                            }`}>
+                               {notif.type === 'MESSAGE' ? <MessageCircle className="w-4 h-4 text-blue-400" /> : 
+                                notif.type === 'ACCEPTED' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <CalendarDays className="w-4 h-4 text-amber-400" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                               <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">{notif.type}</p>
+                               <h4 className="text-sm font-black text-white leading-tight mb-1">{notif.title}</h4>
+                               <p className="text-[11px] text-white/60 font-medium truncate">{notif.content}</p>
+                            </div>
+                            <div className="text-[8px] font-bold text-white/20 uppercase">
+                               {new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                         </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                )}
+              </div>
             </div>
 
             {/* Support Portal / Quick Help */}

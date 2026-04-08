@@ -5,7 +5,7 @@ import {
   ChevronLeft, Send, CalendarDays, Clock,
   CheckCircle2, Zap, BookOpen, Lock, Users,
   MessageCircle, Search, Bell, ArrowRight,
-  Timer, Wifi, Shield, X
+  Timer, Wifi, Shield, X, History
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -58,7 +58,7 @@ const fmtTime = (t: string) => {
 };
 const toDateTime = (dateStr: string, timeStr: string) => new Date(`${dateStr}T${timeStr}`);
 
-type Tab = 'updates' | 'discussion' | 'class';
+type Tab = 'updates' | 'discussion' | 'class' | 'history';
 
 // ─── Shared Components ──────────────────────────────────────────────
 const ChatBubble = ({ msg, tutorInitial }: { msg: Message; tutorInitial: string }) => (
@@ -79,7 +79,7 @@ const ChatInput = ({ value, onChange, onSend, placeholder }: any) => (
       type="text" 
       value={value}
       onChange={(e: any) => onChange(e.target.value)}
-      onKeyDown={(e: any) => e.key === 'Enter' && onSend()}
+      onKeyDown={(e: any) => { if (e.key === 'Enter') { e.preventDefault(); onSend(); } }}
       placeholder={placeholder || "Type your message..."}
       className="flex-1 bg-transparent px-6 py-4 text-sm font-medium focus:outline-none placeholder:text-slate-300"
     />
@@ -112,6 +112,9 @@ export default function StudentSessionsPage() {
 
   const msgBottomRef = useRef<HTMLDivElement>(null);
   const classBottomRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<any>(null);
+  const [isTutorTyping, setIsTutorTyping] = useState(false);
+  const typingTimeoutRef = useRef<any>(null);
 
   // ─── Init ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -190,40 +193,98 @@ export default function StudentSessionsPage() {
     if (!selectedSession?.roomId || !currentUser) return;
 
     const fetchMsgs = async () => {
-      const { data } = await supabase
+      // Fetch Discussion Messages
+      const { data: dData } = await supabase
         .from('chat_messages')
         .select('*')
         .eq('room_id', selectedSession.roomId)
         .order('created_at', { ascending: true });
 
-      if (data) {
-        const mapped: Message[] = data.map((m: any) => ({
+      if (dData) {
+        setMessages(dData.map((m: any) => ({
           id: m.id,
           sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
           text: m.content,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }));
-        setMessages(mapped);
+        })));
+      }
+
+      // Fetch Live Class Messages
+      const { data: cData } = await supabase
+        .from('live_class_messages')
+        .select('*')
+        .eq('room_id', selectedSession.roomId)
+        .order('created_at', { ascending: true });
+
+      if (cData) {
+        setClassMessages(cData.map((m: any) => ({
+          id: m.id,
+          sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
+          text: m.content,
+          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        })));
       }
     };
     fetchMsgs();
 
-    const channel = supabase
-      .channel(`student-room-${selectedSession.roomId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${selectedSession.roomId}` }, (payload) => {
-        const m = payload.new as any;
-        const msg: Message = {
-          id: m.id,
-          sender: m.sender_id === currentUser.id ? 'student' : 'tutor',
-          text: m.content,
-          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setMessages(prev => [...prev, msg]);
-      })
-      .subscribe();
+    const channel = supabase.channel(`student-room-${selectedSession.roomId}`);
+    channelRef.current = channel;
 
-    return () => { supabase.removeChannel(channel); };
+    channel
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+        const m = payload.new as any;
+        if (m.room_id !== selectedSession.roomId) return;
+        setMessages(prev => {
+          if (prev.some(existing => existing.id === m.id)) return prev;
+          const msg: Message = {
+            id: m.id,
+            sender: m.sender_id === currentUser.id ? 'student' : 'tutor',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          return [...prev, msg];
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload) => {
+        const m = payload.new as any;
+        if (m.room_id !== selectedSession.roomId) return;
+        setClassMessages(prev => {
+          if (prev.some(existing => existing.id === m.id)) return prev;
+          const msg: Message = {
+            id: m.id,
+            sender: m.sender_id === currentUser.id ? 'student' : 'tutor',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          return [...prev, msg];
+        });
+      })
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const otherTyping = Object.values(state).flat().some((u: any) => u.user_id !== currentUser?.id && u.typing);
+        setIsTutorTyping(otherTyping);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: currentUser?.id, typing: false });
+        }
+      });
+
+    return () => { 
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      supabase.removeChannel(channel); 
+      channelRef.current = null;
+    };
   }, [selectedSession, currentUser]);
+
+  const handleTyping = () => {
+    if (!channelRef.current) return;
+    channelRef.current.track({ user_id: currentUser?.id, typing: true });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      channelRef.current?.track({ user_id: currentUser?.id, typing: false });
+    }, 2000);
+  };
 
   useEffect(() => { msgBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
   useEffect(() => { classBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [classMessages.length]);
@@ -256,18 +317,67 @@ export default function StudentSessionsPage() {
 
   const isClassActive = () => !!getActiveClass();
 
-  // ─── Send messages ────────────────────────────────────────────────
-  const sendMsg = async () => {
-    if (!msgInput.trim() || !selectedSession?.roomId) return;
-    const content = msgInput.trim(); setMsgInput('');
-    await supabase.from('chat_messages').insert({ room_id: selectedSession.roomId, sender_id: currentUser?.id, content });
+  const getTimeRemaining = (sc: ScheduledClass | null): string => {
+    if (!sc) return '';
+    const end = toDateTime(sc.class_date, sc.end_time);
+    const diff = end.getTime() - now.getTime();
+    if (diff <= 0) return '00:00';
+    const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000), s = Math.floor((diff % 60000) / 1000);
+    return h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const sendClassMsg = () => {
-    if (!classInput.trim() || !isClassActive() || !selectedSession) return;
-    const msg: Message = { id: crypto.randomUUID(), sender: 'student', text: classInput.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
-    setClassMessages(prev => [...prev, msg]);
+  // ─── Send messages ────────────────────────────────────────────────
+  const sendMsg = async () => {
+    if (!msgInput.trim() || !selectedSession?.roomId || !currentUser) return;
+    const content = msgInput.trim(); 
+    setMsgInput('');
+
+    // Optimistic Update: Manifest the signal locally first
+    const optimisticMsg: Message = {
+      id: crypto.randomUUID(),
+      sender: 'student',
+      text: content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+
+    const { error } = await supabase.from('chat_messages').insert({ 
+      room_id: selectedSession.roomId, 
+      sender_id: currentUser.id, 
+      content 
+    });
+
+    if (error) {
+      console.error("Transmission Error:", error.message);
+      // Remove the optimistic message if it failed
+      setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+    }
+  };
+
+  const sendClassMsg = async () => {
+    if (!classInput.trim() || !isClassActive() || !selectedSession || !currentUser) return;
+    const content = classInput.trim(); 
     setClassInput('');
+
+    // Optimistic Update
+    const optMsg: Message = {
+      id: crypto.randomUUID(),
+      sender: 'student',
+      text: content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setClassMessages(prev => [...prev, optMsg]);
+
+    const { error } = await supabase.from('live_class_messages').insert({
+      room_id: selectedSession.roomId,
+      sender_id: currentUser.id,
+      content
+    });
+
+    if (error) {
+      console.error("Signal Failed:", error.message);
+      setClassMessages(prev => prev.filter(m => m.id !== optMsg.id));
+    }
   };
 
   // ─── Loading ──────────────────────────────────────────────────────
@@ -307,7 +417,7 @@ export default function StudentSessionsPage() {
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-xl font-black italic uppercase tracking-tighter text-brand-dark">My Sessions</h1>
-            <Link href="/" className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">
+            <Link href="/dashboard" className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">
               <ChevronLeft className="w-4 h-4 text-slate-500" />
             </Link>
           </div>
@@ -382,13 +492,15 @@ export default function StudentSessionsPage() {
             { key: 'updates' as Tab, label: 'Updates', icon: Bell },
             { key: 'discussion' as Tab, label: 'Discussion', icon: MessageCircle },
             { key: 'class' as Tab, label: 'Live Class', icon: BookOpen },
+            { key: 'history' as Tab, label: 'History', icon: History },
           ]).map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`relative flex items-center gap-3 px-8 py-5 transition-all ${activeTab === tab.key ? 'text-brand-dark' : 'text-slate-400'}`}>
               <tab.icon className="w-4 h-4" />
               <div className="text-left font-black uppercase leading-none">
                 <p className="text-[10px] tracking-[2px]">{tab.label}</p>
                 <p className="text-[8px] tracking-widest opacity-60 mt-1">
-                  {tab.key === 'class' ? (isClassActive() ? 'Live' : 'Locked') : 'View'}
+                  {tab.key === 'class' ? (isClassActive() ? 'Live' : 'Locked') : 
+                   tab.key === 'history' ? 'Past' : 'View'}
                 </p>
               </div>
               {activeTab === tab.key && <motion.div layoutId="student-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
@@ -405,57 +517,60 @@ export default function StudentSessionsPage() {
               <motion.div key="updates" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-10 py-10 space-y-8 custom-scroll">
                 
                 {/* Connection Status Card */}
-                <div className={`rounded-[2rem] border p-8 ${selectedSession?.status === 'accepted' ? 'bg-emerald-50/50 border-emerald-200' : selectedSession?.status === 'declined' ? 'bg-red-50/50 border-red-200' : 'bg-amber-50/50 border-amber-200'}`}>
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${selectedSession?.status === 'accepted' ? 'bg-emerald-100' : selectedSession?.status === 'declined' ? 'bg-red-100' : 'bg-amber-100'}`}>
-                      {selectedSession?.status === 'accepted' ? <CheckCircle2 className="w-7 h-7 text-emerald-600" /> : selectedSession?.status === 'declined' ? <X className="w-7 h-7 text-red-500" /> : <Clock className="w-7 h-7 text-amber-600" />}
+                {selectedSession && selectedSession.scheduledClasses.length === 0 && (
+                  <div className={`rounded-[2rem] border p-8 ${selectedSession?.status === 'accepted' ? 'bg-emerald-50/50 border-emerald-200' : selectedSession?.status === 'declined' ? 'bg-red-50/50 border-red-200' : 'bg-amber-50/50 border-amber-200'}`}>
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${selectedSession?.status === 'accepted' ? 'bg-emerald-100' : selectedSession?.status === 'declined' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                        {selectedSession?.status === 'accepted' ? <CheckCircle2 className="w-7 h-7 text-emerald-600" /> : selectedSession?.status === 'declined' ? <X className="w-7 h-7 text-red-500" /> : <Clock className="w-7 h-7 text-amber-600" />}
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black uppercase italic tracking-tighter text-brand-dark">
+                          {selectedSession?.status === 'accepted' ? 'Tutor Connected' : selectedSession?.status === 'declined' ? 'Request Declined' : 'Awaiting Response'}
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium mt-1">
+                          {selectedSession?.status === 'accepted' ? `${selectedSession.tutorName} has accepted your request. You can now discuss scheduling.` : selectedSession?.status === 'declined' ? 'This tutor has declined. Try connecting with another specialist.' : `Your request has been sent to ${selectedSession?.tutorName}. They'll respond soon.`}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-xl font-black uppercase italic tracking-tighter text-brand-dark">
-                        {selectedSession?.status === 'accepted' ? 'Tutor Connected' : selectedSession?.status === 'declined' ? 'Request Declined' : 'Awaiting Response'}
-                      </h3>
-                      <p className="text-xs text-slate-500 font-medium mt-1">
-                        {selectedSession?.status === 'accepted' ? `${selectedSession.tutorName} has accepted your request. You can now discuss scheduling.` : selectedSession?.status === 'declined' ? 'This tutor has declined. Try connecting with another specialist.' : `Your request has been sent to ${selectedSession?.tutorName}. They'll respond soon.`}
-                      </p>
-                    </div>
+                    {selectedSession?.status === 'accepted' && (
+                      <button onClick={() => setActiveTab('discussion')} className="flex items-center gap-2 px-5 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all">
+                        <MessageCircle className="w-3.5 h-3.5" /> Open Discussion
+                      </button>
+                    )}
                   </div>
-                  {selectedSession?.status === 'accepted' && (
-                    <button onClick={() => setActiveTab('discussion')} className="flex items-center gap-2 px-5 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all">
-                      <MessageCircle className="w-3.5 h-3.5" /> Open Discussion
-                    </button>
-                  )}
-                </div>
+                )}
 
                 {/* Scheduled Classes */}
                 <div className="space-y-4">
-                  <p className="text-[10px] font-black uppercase tracking-[5px] text-slate-400">Scheduled Classes</p>
+                  <p className="text-[10px] font-black uppercase tracking-[5px] text-slate-400">Upcoming Missions</p>
                   
-                  {(!selectedSession || selectedSession.scheduledClasses.length === 0) ? (
+                  {(!selectedSession || selectedSession.scheduledClasses.filter(sc => now <= toDateTime(sc.class_date, sc.end_time)).length === 0) ? (
                     <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-slate-200">
                       <CalendarDays className="w-10 h-10 text-slate-200 mx-auto mb-4" />
                       <p className="text-[10px] font-black uppercase tracking-[3px] text-slate-300 italic">
-                        {selectedSession?.status === 'accepted' ? 'Tutor hasn\'t scheduled a class yet. Check the discussion tab.' : 'No classes scheduled yet.'}
+                        {selectedSession?.status === 'accepted' ? 'Tutor hasn\'t scheduled a class yet. Check the discussion tab.' : 'No upcoming classes.'}
                       </p>
                     </div>
                   ) : (
-                    selectedSession.scheduledClasses.map(sc => {
+                    selectedSession.scheduledClasses
+                    .filter(sc => now <= toDateTime(sc.class_date, sc.end_time))
+                    .map(sc => {
                       const isLive = now >= toDateTime(sc.class_date, sc.start_time) && now <= toDateTime(sc.class_date, sc.end_time);
-                      const isPast = now > toDateTime(sc.class_date, sc.end_time);
                       const countdown = getCountdown(sc);
 
                       return (
-                        <div key={sc.id} className={`bg-white rounded-2xl border p-6 flex items-center justify-between shadow-sm transition-all ${isLive ? 'border-emerald-300 ring-2 ring-emerald-100' : isPast ? 'border-slate-100 opacity-60' : 'border-slate-100'}`}>
+                        <div key={sc.id} className={`bg-white rounded-2xl border p-6 flex items-center justify-between shadow-sm transition-all ${isLive ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-slate-100'}`}>
                           <div className="flex items-center gap-5">
-                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isLive ? 'bg-emerald-100' : isPast ? 'bg-slate-100' : 'bg-blue-50'}`}>
-                              {isLive ? <Wifi className="w-6 h-6 text-emerald-600 animate-pulse" /> : isPast ? <CheckCircle2 className="w-6 h-6 text-slate-400" /> : <CalendarDays className="w-6 h-6 text-blue-500" />}
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isLive ? 'bg-emerald-100' : 'bg-blue-50'}`}>
+                              {isLive ? <Wifi className="w-6 h-6 text-emerald-600 animate-pulse" /> : <CalendarDays className="w-6 h-6 text-blue-500" />}
                             </div>
                             <div>
                               <p className="font-black italic text-brand-dark uppercase text-sm">{fmtDate(sc.class_date)}</p>
                               <p className="text-xs font-bold text-slate-400 mt-0.5">{fmtTime(sc.start_time)} — {fmtTime(sc.end_time)}</p>
                               <div className="flex items-center gap-2 mt-2">
-                                <div className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : isPast ? 'bg-slate-300' : 'bg-blue-400'}`} />
-                                <span className={`text-[9px] font-black uppercase tracking-widest ${isLive ? 'text-emerald-500' : isPast ? 'text-slate-400' : 'text-blue-500'}`}>
-                                  {isLive ? 'Live Now' : isPast ? 'Completed' : 'Upcoming'}
+                                <div className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+                                <span className={`text-[9px] font-black uppercase tracking-widest ${isLive ? 'text-emerald-500' : 'text-blue-500'}`}>
+                                  {isLive ? 'Live Now' : 'Upcoming'}
                                 </span>
                               </div>
                             </div>
@@ -465,13 +580,11 @@ export default function StudentSessionsPage() {
                               <button onClick={() => setActiveTab('class')} className="px-5 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2">
                                 <Zap className="w-3.5 h-3.5" /> Join Class
                               </button>
-                            ) : !isPast && countdown ? (
+                            ) : countdown ? (
                               <div className="bg-brand-dark px-4 py-2 rounded-xl">
                                 <p className="text-[8px] font-black uppercase tracking-[3px] text-brand-primary/50 mb-0.5">Starts In</p>
                                 <p className="text-lg font-black text-brand-primary">{countdown}</p>
                               </div>
-                            ) : isPast ? (
-                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">Session ended</span>
                             ) : null}
                           </div>
                         </div>
@@ -479,6 +592,42 @@ export default function StudentSessionsPage() {
                     })
                   )}
                 </div>
+              </motion.div>
+            )}
+
+            {/* ── HISTORY TAB ───────────────────────────────────────── */}
+            {activeTab === 'history' && (
+              <motion.div key="history" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-10 py-10 space-y-8 custom-scroll">
+                 <div className="space-y-4">
+                  <p className="text-[10px] font-black uppercase tracking-[5px] text-slate-400">Mission Archive</p>
+                  
+                  {(!selectedSession || selectedSession.scheduledClasses.filter(sc => now > toDateTime(sc.class_date, sc.end_time)).length === 0) ? (
+                    <div className="p-20 text-center">
+                       <History className="w-12 h-12 text-slate-100 mx-auto mb-4" />
+                       <p className="text-[10px] font-black uppercase tracking-[3px] text-slate-200 italic">No historical data manifest.</p>
+                    </div>
+                  ) : (
+                    selectedSession.scheduledClasses
+                    .filter(sc => now > toDateTime(sc.class_date, sc.end_time))
+                    .map(sc => (
+                      <div key={sc.id} className="bg-white border border-slate-100 rounded-2xl p-6 flex items-center justify-between opacity-80 decoration-slate-300">
+                        <div className="flex items-center gap-5">
+                          <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400">
+                            <CheckCircle2 className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <p className="font-black italic text-slate-400 uppercase text-sm">{fmtDate(sc.class_date)}</p>
+                            <p className="text-xs font-bold text-slate-300 mt-0.5">{fmtTime(sc.start_time)} — {fmtTime(sc.end_time)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                           <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500">Completed</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                 </div>
               </motion.div>
             )}
 
@@ -493,9 +642,24 @@ export default function StudentSessionsPage() {
                     </div>
                   )}
                   {messages.map(m => <ChatBubble key={m.id} msg={m} tutorInitial={selectedSession?.tutorInitial || 'T'} />)}
+                  {isTutorTyping && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2 items-center text-[10px] font-black uppercase tracking-widest text-slate-300 italic ml-11">
+                      <div className="flex gap-1">
+                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                      {selectedSession?.tutorName} is manifesting a response...
+                    </motion.div>
+                  )}
                   <div ref={msgBottomRef} />
                 </div>
-                <ChatInput value={msgInput} onChange={setMsgInput} onSend={sendMsg} placeholder="Message your tutor..." />
+                <ChatInput 
+                  value={msgInput} 
+                  onChange={(val: string) => { setMsgInput(val); handleTyping(); }} 
+                  onSend={sendMsg} 
+                  placeholder="Message your tutor..." 
+                />
               </motion.div>
             )}
 
@@ -522,9 +686,27 @@ export default function StudentSessionsPage() {
                   </div>
                 ) : (
                   <div className="h-full flex flex-col max-w-4xl mx-auto w-full">
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3 mb-4 flex items-center gap-3">
-                      <Wifi className="w-4 h-4 text-emerald-500 animate-pulse" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Live Session Active with {selectedSession?.tutorName}</span>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-4 mb-6 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                          <Wifi className="w-5 h-5 text-emerald-500 animate-pulse" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Session Active</p>
+                          <p className="text-sm font-black text-brand-dark uppercase italic">{selectedSession?.tutorName}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/50 mb-0.5">Time Limit</p>
+                          <p className="text-xs font-bold text-emerald-700">{fmtTime(getActiveClass()?.start_time || '00:00')} - {fmtTime(getActiveClass()?.end_time || '00:00')}</p>
+                        </div>
+                        <div className="h-8 w-px bg-emerald-200" />
+                        <div className="text-right min-w-[80px]">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/50 mb-0.5">Ending In</p>
+                          <p className="text-xl font-black text-emerald-700 font-mono tracking-tighter">{getTimeRemaining(getActiveClass())}</p>
+                        </div>
+                      </div>
                     </div>
                     <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                       {classMessages.length === 0 && <div className="py-20 text-center text-slate-300 font-black uppercase tracking-[3px] italic">Class is live. Start interacting...</div>}
