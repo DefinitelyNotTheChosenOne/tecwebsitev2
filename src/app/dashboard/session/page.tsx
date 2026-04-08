@@ -439,12 +439,21 @@ export default function SessionPage() {
 
   const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.subject.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="h-screen bg-white font-sans flex overflow-hidden">
       <ScrollStyles />
-      <aside className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/50 shrink-0">
-        <div className="p-6">
-          <h1 className="text-xl font-black italic uppercase tracking-tighter text-brand-dark mb-6">Sessions</h1>
+      {/* ── Mobile Overlay ────────────────────────────────────────── */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      <aside className={`fixed md:relative z-50 md:z-auto h-full w-72 md:w-80 border-r border-slate-100 flex flex-col bg-slate-50/50 shrink-0 transition-transform duration-300 ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}>
+        <div className="p-5 md:p-6">
+          <h1 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-brand-dark mb-5">Sessions</h1>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
             <input type="text" placeholder="Search students..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold outline-none focus:border-brand-primary transition-all shadow-sm" />
@@ -453,8 +462,8 @@ export default function SessionPage() {
         <div className="flex-1 overflow-y-auto custom-scroll px-3 space-y-1">
           <p className="px-4 text-[9px] font-black uppercase tracking-[3px] text-slate-400 mb-3">Active Students</p>
           {filteredStudents.map(s => (
-            <button key={s.id} onClick={() => setSelectedStudent(s)} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-black ${selectedStudent?.id === s.id ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>{s.initial}</div>
+            <button key={s.id} onClick={() => { setSelectedStudent(s); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-black ${selectedStudent?.id === s.id ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>{s.initial}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start mb-0.5"><p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p><span className="text-[8px] font-bold text-slate-300 uppercase">{s.lastActive}</span></div>
                 <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary leading-none">{s.subject}</p>
@@ -463,18 +472,21 @@ export default function SessionPage() {
           ))}
         </div>
         <div className="p-4 border-t border-slate-100 bg-white flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-brand-dark flex items-center justify-center text-white font-black">T</div>
+          <div className="w-9 h-9 rounded-xl bg-brand-dark flex items-center justify-center text-white font-black text-sm">{currentUser?.email?.charAt(0).toUpperCase() || 'T'}</div>
           <div className="flex-1 text-left"><p className="text-xs font-black text-brand-dark uppercase italic leading-none">Specialist Tutor</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Verified Expert</p></div>
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-50/20">
-        <header className="bg-white border-b border-slate-100 px-8 py-3.5 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-brand-dark transition-colors"><ChevronLeft className="w-3.5 h-3.5" />Back</Link>
-            <div className="h-6 w-px bg-slate-100" />
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-50/20 w-full">
+        <header className="bg-white border-b border-slate-100 px-4 md:px-8 py-3 md:py-3.5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 md:gap-6">
+            <button onClick={() => setSidebarOpen(true)} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all md:hidden">
+              <Search className="w-4 h-4 text-slate-500" />
+            </button>
+            <Link href="/dashboard" className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-brand-dark transition-colors"><ChevronLeft className="w-3.5 h-3.5" />Back</Link>
+            <div className="hidden md:block h-6 w-px bg-slate-100" />
             <div className="flex flex-col items-start leading-none">
-              <p className="text-[11px] font-black text-brand-dark uppercase italic ">{selectedStudent?.name || 'No Student'}</p>
+              <p className="text-[11px] font-black text-brand-dark uppercase italic">{selectedStudent?.name || 'No Student'}</p>
               <p className="text-[9px] font-bold text-brand-primary uppercase tracking-widest mt-1">{selectedStudent?.subject || 'N/A'}</p>
             </div>
           </div>

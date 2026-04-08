@@ -408,18 +408,32 @@ export default function StudentSessionsPage() {
     </div>
   );
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="h-screen bg-white font-sans flex overflow-hidden">
       <ScrollStyles />
 
+      {/* ── Mobile Sidebar Overlay ──────────────────────────────────── */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* ── Sidebar ───────────────────────────────────────────────── */}
-      <aside className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/50 shrink-0">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-xl font-black italic uppercase tracking-tighter text-brand-dark">My Sessions</h1>
-            <Link href="/dashboard" className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">
-              <ChevronLeft className="w-4 h-4 text-slate-500" />
-            </Link>
+      <aside className={`fixed md:relative z-50 md:z-auto h-full w-72 md:w-80 border-r border-slate-100 flex flex-col bg-slate-50/50 shrink-0 transition-transform duration-300 ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}>
+        <div className="p-5 md:p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h1 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-brand-dark">My Sessions</h1>
+            <div className="flex items-center gap-2">
+              <Link href="/dashboard" className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">
+                <ChevronLeft className="w-4 h-4 text-slate-500" />
+              </Link>
+              <button onClick={() => setSidebarOpen(false)} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all md:hidden">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
@@ -430,9 +444,9 @@ export default function StudentSessionsPage() {
         <div className="flex-1 overflow-y-auto custom-scroll px-3 space-y-1">
           <p className="px-4 text-[9px] font-black uppercase tracking-[3px] text-slate-400 mb-3">Active Tutors</p>
           {filteredSessions.map(s => (
-            <button key={s.roomId} onClick={() => { setSelectedSession(s); setActiveTab('updates'); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedSession?.roomId === s.roomId ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
+            <button key={s.roomId} onClick={() => { setSelectedSession(s); setActiveTab('updates'); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedSession?.roomId === s.roomId ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
               <div className="relative">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-black ${selectedSession?.roomId === s.roomId ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600'}`}>{s.tutorInitial}</div>
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-black ${selectedSession?.roomId === s.roomId ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600'}`}>{s.tutorInitial}</div>
                 <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-white flex items-center justify-center ${s.status === 'accepted' ? 'bg-emerald-400' : s.status === 'declined' ? 'bg-red-400' : 'bg-amber-400'}`}>
                   {s.status === 'accepted' ? <CheckCircle2 className="w-2.5 h-2.5 text-white" /> : <Clock className="w-2.5 h-2.5 text-white" />}
                 </div>
@@ -451,7 +465,7 @@ export default function StudentSessionsPage() {
         </div>
 
         <div className="p-4 border-t border-slate-100 bg-white flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white font-black text-sm">
+          <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center text-white font-black text-sm">
             {profile?.full_name?.charAt(0) || 'S'}
           </div>
           <div className="flex-1 text-left">
@@ -462,14 +476,18 @@ export default function StudentSessionsPage() {
       </aside>
 
       {/* ── Main ──────────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-50/20">
-        <header className="bg-white border-b border-slate-100 px-8 py-3.5 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black ${selectedSession?.status === 'accepted' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-50/20 w-full">
+        <header className="bg-white border-b border-slate-100 px-4 md:px-8 py-3 md:py-3.5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Mobile hamburger */}
+            <button onClick={() => setSidebarOpen(true)} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all md:hidden">
+              <Search className="w-4 h-4 text-slate-500" />
+            </button>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black ${selectedSession?.status === 'accepted' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
               {selectedSession?.tutorInitial || '?'}
             </div>
             <div>
-              <p className="text-sm font-black text-brand-dark uppercase italic leading-none">{selectedSession?.tutorName || 'No Tutor Selected'}</p>
+              <p className="text-sm font-black text-brand-dark uppercase italic leading-none">{selectedSession?.tutorName || 'No Tutor'}</p>
               <div className="flex items-center gap-2 mt-1">
                 <div className={`w-1.5 h-1.5 rounded-full ${selectedSession?.status === 'accepted' ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
                 <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedSession?.status === 'accepted' ? 'text-emerald-500' : 'text-amber-500'}`}>
@@ -479,24 +497,25 @@ export default function StudentSessionsPage() {
             </div>
           </div>
           {selectedSession && selectedSession.scheduledClasses.length > 0 && (
-            <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-xl border border-blue-100">
-              <CalendarDays className="w-3.5 h-3.5 text-blue-500" />
-              <span className="text-[9px] font-black uppercase tracking-widest text-blue-600">{selectedSession.scheduledClasses.length} Class{selectedSession.scheduledClasses.length > 1 ? 'es' : ''} Scheduled</span>
+            <div className="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100">
+              <CalendarDays className="w-3 h-3 text-blue-500" />
+              <span className="text-[9px] font-black uppercase tracking-widest text-blue-600 hidden sm:inline">{selectedSession.scheduledClasses.length} Class{selectedSession.scheduledClasses.length > 1 ? 'es' : ''} Scheduled</span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-blue-600 sm:hidden">{selectedSession.scheduledClasses.length}</span>
             </div>
           )}
         </header>
 
         {/* Tabs */}
-        <div className="bg-white border-b border-slate-100 px-8 flex shrink-0">
+        <div className="bg-white border-b border-slate-100 px-2 md:px-8 flex shrink-0 overflow-x-auto">
           {([
             { key: 'updates' as Tab, label: 'Updates', icon: Bell },
             { key: 'discussion' as Tab, label: 'Discussion', icon: MessageCircle },
             { key: 'class' as Tab, label: 'Live Class', icon: BookOpen },
             { key: 'history' as Tab, label: 'History', icon: History },
           ]).map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`relative flex items-center gap-3 px-8 py-5 transition-all ${activeTab === tab.key ? 'text-brand-dark' : 'text-slate-400'}`}>
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`relative flex items-center gap-2 px-4 md:px-6 py-4 transition-all shrink-0 ${activeTab === tab.key ? 'text-brand-dark' : 'text-slate-400'}`}>
               <tab.icon className="w-4 h-4" />
-              <div className="text-left font-black uppercase leading-none">
+              <div className="text-left font-black uppercase leading-none hidden sm:block">
                 <p className="text-[10px] tracking-[2px]">{tab.label}</p>
                 <p className="text-[8px] tracking-widest opacity-60 mt-1">
                   {tab.key === 'class' ? (isClassActive() ? 'Live' : 'Locked') : 
@@ -514,7 +533,7 @@ export default function StudentSessionsPage() {
 
             {/* ── UPDATES TAB ──────────────────────────────────────── */}
             {activeTab === 'updates' && (
-              <motion.div key="updates" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-10 py-10 space-y-8 custom-scroll">
+              <motion.div key="updates" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-4 md:px-10 py-6 md:py-10 space-y-6 md:space-y-8 custom-scroll">
                 
                 {/* Connection Status Card */}
                 {selectedSession && selectedSession.scheduledClasses.length === 0 && (
