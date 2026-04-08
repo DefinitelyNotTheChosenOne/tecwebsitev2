@@ -153,9 +153,11 @@ export default function SessionPage() {
         .select(`student_id, help_requests (subject)`)
         .eq('tutor_id', userId);
 
-      const studentList: StudentProfile[] = rooms.map(room => {
+      // Map rooms to StudentProfile objects
+      const studentList = (rooms || []).map((room: any) => {
         const session = sessData?.find(s => s.student_id === room.student_id);
-        const name = room.profiles?.full_name || 'Anonymous Student';
+        const name = (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.full_name || 'Anonymous Student';
+        
         return {
           id: room.student_id,
           roomId: room.id,
@@ -165,11 +167,11 @@ export default function SessionPage() {
           lastMsg: '...', 
           status: 'active',
           lastActive: 'Just now'
-        };
+        } as StudentProfile;
       });
 
       setStudents(studentList);
-      if (studentList.length > 0) setSelectedStudent(studentList[0]);
+      if (studentList.length > 0 && !selectedStudent) setSelectedStudent(studentList[0]);
       setLoading(false);
     } catch (err) {
       console.error('Error:', err);
@@ -240,14 +242,29 @@ export default function SessionPage() {
 
   const scheduleClass = async () => {
     if (!formDate || !formStart || !formEnd || !selectedStudent) return;
+    setConflictError(null);
     if (formEnd <= formStart) { setConflictError('End time must be after start time.'); return; }
     const ns = toDate(formDate, formStart), ne = toDate(formDate, formEnd);
     const conflicts = slots.filter(s => s.date === formDate && hasConflict(ns, ne, toDate(s.date, s.startTime), toDate(s.date, s.endTime)));
     if (conflicts.length > 0) { setConflictError(`Conflict: ${conflicts[0].studentName} is scheduled then.`); return; }
 
+    // Persist to database
+    const { error: schedErr } = await supabase.from('scheduled_classes').insert({
+      room_id: selectedStudent.roomId,
+      tutor_id: currentUser?.id,
+      student_id: selectedStudent.id,
+      class_date: formDate,
+      start_time: formStart,
+      end_time: formEnd,
+    });
+
+    if (schedErr) { setConflictError('Failed to save schedule. Try again.'); console.error(schedErr); return; }
+
     const newSlot: ClassSlot = { id: Date.now(), studentName: selectedStudent.name, subject: selectedStudent.subject, date: formDate, startTime: formStart, endTime: formEnd };
     setSlots(p => [...p, newSlot]); setLawrenceSlot(newSlot); setFormDate(''); setFormStart(''); setFormEnd('');
-    await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser?.id, content: `Scheduled for ${fmtDate(formDate)} at ${fmtTime(formStart)}.` });
+    
+    // Notify student via chat
+    await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser?.id, content: `📅 Class scheduled: ${fmtDate(formDate)} at ${fmtTime(formStart)} - ${fmtTime(formEnd)}` });
   };
 
   const sendDiscMsg = async () => {
@@ -303,7 +320,7 @@ export default function SessionPage() {
       <main className="flex-1 flex flex-col min-w-0 bg-slate-50/20">
         <header className="bg-white border-b border-slate-100 px-8 py-3.5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-6">
-            <Link href="/dashboard/missions" className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-brand-dark transition-colors"><ChevronLeft className="w-3.5 h-3.5" />Back</Link>
+            <Link href="/dashboard" className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-brand-dark transition-colors"><ChevronLeft className="w-3.5 h-3.5" />Back</Link>
             <div className="h-6 w-px bg-slate-100" />
             <div className="flex flex-col items-start leading-none">
               <p className="text-[11px] font-black text-brand-dark uppercase italic ">{selectedStudent?.name || 'No Student'}</p>

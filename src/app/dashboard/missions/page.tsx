@@ -91,8 +91,6 @@ export default function SpecialistMissionBoard() {
         }));
 
       setMissions([...(publicReqs || []), ...refinedDirect]);
-
-      setMissions([...(publicReqs || []), ...refinedDirect]);
       setLoading(false);
     };
     init();

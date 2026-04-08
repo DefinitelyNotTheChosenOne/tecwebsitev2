@@ -8,13 +8,11 @@ import {
   AlertCircle, ShieldCheck
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'react-router-dom'; // Using standard next router instead
-
 // We'll use the Next.js router
-import { useRouter as useNextRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 export default function ProfileEditor() {
-  const router = useNextRouter();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<any>(null);

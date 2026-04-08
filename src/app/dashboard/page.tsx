@@ -135,7 +135,7 @@ export default function UserDashboard() {
               {[
                 { label: isTutor ? 'Available Bids' : 'Post Mission', sub: isTutor ? 'Hunt Markets' : 'Recruit Experts', icon: BookOpen, color: 'indigo', href: isTutor ? '/help-wanted' : '/help-wanted/new' },
                 { label: isTutor ? 'Active Offers' : 'Bids Recieved', sub: 'Inbound Signals', icon: Send, color: 'pink', href: isTutor ? '/bids' : '/dashboard' },
-                { label: 'Chat Terminal', sub: 'Secure Comms', icon: MessageSquare, color: 'emerald', href: '/dashboard/session' }
+                { label: 'Chat Terminal', sub: 'Secure Comms', icon: MessageSquare, color: 'emerald', href: isTutor ? '/dashboard/session' : '/sessions' }
               ].map((tile, i) => (
                 <Link key={i} href={tile.href}>
                   <motion.div 
@@ -226,7 +226,7 @@ export default function UserDashboard() {
                           
                           <div className="flex gap-3">
                              <Link 
-                               href="/dashboard/session"
+                               href={isTutor ? "/dashboard/session" : "/sessions"}
                                className="flex-[2] py-4 bg-brand-dark text-white rounded-2xl text-[9px] font-black text-center uppercase tracking-[2px] transition-all hover:bg-brand-primary hover:text-brand-dark shadow-lg shadow-brand-dark/20"
                              >
                               Enter Terminal

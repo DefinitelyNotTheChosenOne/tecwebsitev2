@@ -6,8 +6,6 @@ import { scanContentForLeakage } from './moderation';
  * Performs auto-moderation for anti-leakage before insertion.
  */
 export const sendMessage = async (conversationId: string, senderId: string, content: string) => {
-  setIsLoading(true);
-  
   // 1. Moderate Content
   const flag = scanContentForLeakage(content);
   

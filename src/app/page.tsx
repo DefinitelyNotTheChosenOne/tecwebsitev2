@@ -45,7 +45,9 @@ export default function Home() {
       .single();
     if (data) {
       setProfile(data);
-      // SaaS Auto-Redirect REMOVED: allow landing page browsing for logged-in users
+      if (data.role === 'seller') {
+        router.replace('/dashboard');
+      }
     }
   };
 
@@ -85,6 +87,9 @@ export default function Home() {
           <div className="hidden xl:flex items-center gap-8 text-[11px] font-black uppercase tracking-[2px] text-brand-secondary/80">
             <Link href="#markets" className="hover:text-white transition-colors">Subjects</Link>
             <Link href={session ? "/help-wanted" : "/auth?mode=signup&redirect=/help-wanted"} className="hover:text-white transition-colors">Help Wanted</Link>
+            {session && profile?.role !== 'seller' && (
+              <Link href="/sessions" className="text-blue-400 hover:text-blue-300 transition-colors">My Sessions</Link>
+            )}
             {!session && (
               <Link href="/auth?mode=signup&redirect=/dashboard" className="text-brand-primary/60 hover:text-brand-primary transition-colors italic">Become a Tutor</Link>
             )}

@@ -90,6 +90,8 @@ export default function SubjectMarketFeed() {
       }
 
       // 3. Send opening signal
+      if (!room) throw new Error("Tunnel failed to manifest.");
+
       const { error: msgErr } = await supabase.from('chat_messages').insert({
         room_id: room.id,
         sender_id: session.user.id,
@@ -103,7 +105,7 @@ export default function SubjectMarketFeed() {
         setSentRequests([...sentRequests, tutor.id]);
       }
       
-      (window as any)._latestTunnelId = room.id;
+      if (room) (window as any)._latestTunnelId = room.id;
 
     } catch (err: any) {
       console.error("Tunnel Error Intelligence:", err.message || err);
