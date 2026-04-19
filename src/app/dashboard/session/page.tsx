@@ -106,6 +106,7 @@ export default function SessionPage() {
   const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('discussion');
+  const [sidebarFilter, setSidebarFilter] = useState<'active' | 'past'>('active');
   const [now, setNow] = useState(new Date());
 
   const [allDiscMsgs, setAllDiscMsgs] = useState<Record<string, Message[]>>({});
@@ -195,9 +196,10 @@ export default function SessionPage() {
             subject: (session?.help_requests as any)?.subject || 'General Discussion',
             initial: name.charAt(0).toUpperCase(),
             lastMsg: '...', 
-            status: 'active',
+            status: session?.status === 'accepted' ? 'active' : 'pending',
             lastActive: 'Just now',
-            schedules: roomSchedules
+            schedules: roomSchedules,
+            isAccepted: session?.status === 'accepted'
           } as any;
         });
 
@@ -210,7 +212,9 @@ export default function SessionPage() {
           if (target) setSelectedStudent(target);
           else setSelectedStudent(studentList[0]);
         } else if (!selectedStudent) {
-          setSelectedStudent(studentList[0]);
+          // If no target, select the first student who is either accepted OR (if searching/navigating) matching active
+          const firstEligible = studentList.find(s => s.isAccepted) || studentList[0];
+          setSelectedStudent(firstEligible);
         } else {
           const fresh = studentList.find(s => s.id === selectedStudent.id);
           if (fresh) setSelectedStudent(fresh);
@@ -484,23 +488,40 @@ export default function SessionPage() {
         <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <aside className={`fixed md:relative z-50 md:z-auto h-full w-72 md:w-80 border-r border-slate-100 flex flex-col bg-slate-50/50 shrink-0 transition-transform duration-300 ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-      }`}>
-        <div className="p-5 md:p-6">
-          <h1 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-brand-dark mb-5">Sessions</h1>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-            <input type="text" placeholder="Search students..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold outline-none focus:border-brand-primary transition-all shadow-sm" />
-          </div>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-72 md:w-80 bg-slate-50 border-r border-slate-100 flex flex-col transition-transform duration-300 md:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <ScrollStyles />
+        <div className="p-8 pb-4">
+           <h2 className="text-xl font-black text-brand-dark uppercase italic tracking-tighter mb-8 flex items-center justify-between">
+              Students
+              <div className="flex bg-white border border-slate-100 p-0.5 rounded-lg">
+                <button onClick={() => setSidebarFilter('active')} className={`px-2 py-1 text-[8px] font-black uppercase rounded ${sidebarFilter === 'active' ? 'bg-brand-primary text-brand-dark' : 'text-slate-400'}`}>Active</button>
+                <button onClick={() => setSidebarFilter('past')} className={`px-2 py-1 text-[8px] font-black uppercase rounded ${sidebarFilter === 'past' ? 'bg-brand-primary text-brand-dark' : 'text-slate-400'}`}>Past</button>
+              </div>
+           </h2>
+           <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-brand-primary transition-colors" />
+              <input type="text" placeholder="Search missions..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-100 py-3.5 pl-12 pr-6 rounded-2xl text-xs font-bold outline-none focus:border-brand-primary transition-all shadow-sm" />
+           </div>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scroll px-3 space-y-1">
-          <p className="px-4 text-[9px] font-black uppercase tracking-[3px] text-slate-400 mb-3">Active Students</p>
-          {filteredStudents.map(s => (
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2 custom-scroll">
+          {students.filter(s => {
+            const finished = isClassEnded(s);
+            const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.subject.toLowerCase().includes(searchQuery.toLowerCase());
+            
+            if (sidebarFilter === 'active') {
+               return !finished && s.isAccepted && matchesSearch;
+            } else {
+               return (finished || !s.isAccepted) && matchesSearch;
+            }
+          }).map(s => (
             <button key={s.id} onClick={() => { setSelectedStudent(s); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
               <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-black ${selectedStudent?.id === s.id ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>{s.initial}</div>
               <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start mb-0.5"><p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p><span className="text-[8px] font-bold text-slate-300 uppercase">{s.lastActive}</span></div>
+                <div className="flex justify-between items-start mb-0.5">
+                  <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p>
+                  {isClassEnded(s) && <span className="text-[7px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded uppercase">FIN</span>}
+                </div>
                 <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary leading-none">{s.subject}</p>
               </div>
             </button>
