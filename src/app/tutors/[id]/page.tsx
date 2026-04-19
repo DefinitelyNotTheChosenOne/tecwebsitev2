@@ -15,6 +15,8 @@ export default function PublicTutorPortfolio() {
   const [tutor, setTutor] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isTunneling, setIsTunneling] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     // Audit Current Session
@@ -22,12 +24,53 @@ export default function PublicTutorPortfolio() {
       setCurrentUser(user);
     });
 
-    supabase.from('profiles').select('*').eq('id', id).single()
-      .then(({ data }) => {
-        setTutor(data);
-        setLoading(false);
-      });
+    if (id) {
+      supabase.from('profiles').select('*').eq('id', id).single()
+        .then(({ data }) => {
+          setTutor(data);
+          setLoading(false);
+        });
+    }
   }, [id]);
+
+  const handleStartTunnel = async () => {
+    if (!currentUser) { router.push('/auth'); return; }
+    setIsTunneling(true);
+    try {
+      // 1. Establish Secure Room
+      const { data: room, error: roomErr } = await supabase
+        .from('chat_rooms')
+        .upsert({ tutor_id: tutor.id, student_id: currentUser.id }, { onConflict: 'tutor_id,student_id' })
+        .select()
+        .single();
+
+      if (roomErr) throw roomErr;
+
+      // 2. Broadcast Inbound Signal
+      await supabase.from('notifications').insert({
+        user_id: tutor.id,
+        title: 'INBOUND HANDSHAKE SIGNAL',
+        content: `${currentUser.email?.split('@')[0]} is initiating a command tunnel for your services.`,
+        type: 'REQUEST',
+        link: `/dashboard/session?room=${room.id}`
+      });
+
+      // 3. Optional: Initial Message
+      await supabase.from('chat_messages').insert({
+        room_id: room.id,
+        sender_id: currentUser.id,
+        content: `SIGNAL INITIATED: Student has entered the tunnel.`
+      });
+
+      // 4. Deploy User to Terminal
+      router.push(`/sessions?room=${room.id}`);
+    } catch (err) {
+      console.error("Tunnel Failure:", err);
+      alert("Encryption failure in tunnel initiation. Try again.");
+    } finally {
+      setIsTunneling(false);
+    }
+  };
 
   if (loading) return (
     <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
@@ -155,8 +198,13 @@ export default function PublicTutorPortfolio() {
 
                <div className="space-y-4">
                   {currentUser?.id !== tutor.id && (
-                    <button className="w-full py-10 bg-brand-primary/20 border border-brand-primary/30 rounded-[2.5rem] font-black uppercase tracking-[3px] text-xs text-brand-primary flex items-center justify-center gap-4 hover:bg-brand-primary hover:text-brand-dark transition-all group shadow-[0_0_50px_-12px_rgba(var(--brand-primary-rgb),0.5)] active:scale-95">
-                       <MessageSquare className="w-6 h-6 group-hover:rotate-12 transition-transform" /> Start Command Tunnel
+                    <button 
+                      onClick={handleStartTunnel}
+                      disabled={isTunneling}
+                      className="w-full py-10 bg-brand-primary/20 border border-brand-primary/30 rounded-[2.5rem] font-black uppercase tracking-[3px] text-xs text-brand-primary flex items-center justify-center gap-4 hover:bg-brand-primary hover:text-brand-dark transition-all group shadow-[0_0_50px_-12px_rgba(var(--brand-primary-rgb),0.5)] active:scale-95 disabled:opacity-50"
+                    >
+                       <MessageSquare className={`w-6 h-6 ${isTunneling ? 'animate-spin' : 'group-hover:rotate-12'} transition-transform`} /> 
+                       {isTunneling ? 'Initiating Signal...' : 'Start Command Tunnel'}
                     </button>
                   )}
                </div>
