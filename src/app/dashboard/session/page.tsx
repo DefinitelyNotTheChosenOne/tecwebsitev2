@@ -143,12 +143,18 @@ export default function SessionPage() {
       // 2. Delete the tutoring session record
       await supabase.from('tutoring_sessions').delete().eq('room_id', roomId);
       
-      // 3. UI Update
+      // 3. SECURE PURGE: Delete chat history and the tunnel itself
+      // First clear messages to avoid FK issues
+      await supabase.from('chat_messages').delete().eq('room_id', roomId);
+      // Then terminate the room
+      await supabase.from('chat_rooms').delete().eq('id', roomId);
+      
+      // 4. UI Update
       setStudents(prev => prev.filter(s => s.roomId !== roomId));
       if (selectedStudent?.roomId === roomId) {
         setSelectedStudent(null);
       }
-      alert("Session Terminated Successfully.");
+      alert("Mission & Global Tunnel Purged Successfully.");
     } catch (err) {
       console.error(err);
       alert("Critical: Termination Signal Failed.");
