@@ -138,7 +138,11 @@ export default function UserDashboard() {
       setNotifications(prev => [newNotif, ...prev].slice(0, 10));
       
       const isReq = newNotif.type === 'REQUEST' || newNotif.title?.toLowerCase().includes('tunnel');
-      const type = isReq ? 'REQUEST' : 'MESSAGE';
+      const isSched = newNotif.type === 'SCHEDULE' || newNotif.title?.toLowerCase().includes('schedule') || newNotif.title?.toLowerCase().includes('class');
+      
+      let type: 'MESSAGE' | 'REQUEST' = 'MESSAGE';
+      if (isTutor && isReq) type = 'REQUEST';
+      if (!isTutor && isSched) type = 'REQUEST'; // Map schedule to the secondary slot
       
       // Only increment if not on current tab
       if (type !== signalFilter) {
@@ -313,13 +317,14 @@ export default function UserDashboard() {
                 <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
                    {(['MESSAGE', 'REQUEST'] as const).map(f => {
                      const count = unreadCounts[f];
+                     const label = f === 'MESSAGE' ? 'Messages' : (isTutor ? 'Tutor Requests' : 'Mission Schedule');
                      return (
                      <button
                        key={f}
                        onClick={() => setSignalFilter(f)}
                        className={`flex-1 py-2.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all relative flex items-center justify-center gap-2 ${signalFilter === f ? 'bg-brand-primary text-brand-dark shadow-lg' : 'text-white/40 hover:text-white'}`}
                      >
-                       {f === 'MESSAGE' ? 'Messages' : 'Tutor Requests'}
+                       {label}
                        {count > 0 && (
                          <span className="bg-red-500 text-white text-[7px] font-black h-4 px-1.5 rounded-full flex items-center justify-center min-w-[16px] animate-bounce shadow-lg shadow-red-500/20">
                            {count > 9 ? '9+' : count}
@@ -333,16 +338,21 @@ export default function UserDashboard() {
               <div className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scroll">
                 {notifications.filter(n => {
                   const isRequest = n.type === 'REQUEST' || n.title?.toLowerCase().includes('tunnel');
-                  return signalFilter === 'REQUEST' ? isRequest : !isRequest;
+                  const isSchedule = n.type === 'SCHEDULE' || n.title?.toLowerCase().includes('schedule') || n.title?.toLowerCase().includes('class');
+                  const secondSlot = isTutor ? isRequest : isSchedule;
+                  return signalFilter === 'REQUEST' ? secondSlot : !secondSlot;
                 }).length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-20"><div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" /><p className="text-[10px] font-black uppercase tracking-[4px] text-white">No {signalFilter === 'MESSAGE' ? 'messages' : 'requests'} manifest...</p><div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" /></div>
+                  <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-20"><div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" /><p className="text-[10px] font-black uppercase tracking-[4px] text-white">No {signalFilter === 'MESSAGE' ? 'messages' : (isTutor ? 'requests' : 'schedules')} manifest...</p><div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" /></div>
                 ) : (
                   <AnimatePresence mode="popLayout">
                     {notifications.filter(n => {
                       const isRequest = n.type === 'REQUEST' || n.title?.toLowerCase().includes('tunnel');
-                      return signalFilter === 'REQUEST' ? isRequest : !isRequest;
+                      const isSchedule = n.type === 'SCHEDULE' || n.title?.toLowerCase().includes('schedule') || n.title?.toLowerCase().includes('class');
+                      const secondSlot = isTutor ? isRequest : isSchedule;
+                      return signalFilter === 'REQUEST' ? secondSlot : !secondSlot;
                     }).map((notif) => {
                       const isHandshake = notif.title?.toLowerCase().includes('tunnel');
+                      const isTimeSignal = notif.title?.toLowerCase().includes('schedule') || notif.title?.toLowerCase().includes('class');
                       return (
                       <motion.div 
                         key={notif.id} 
@@ -351,19 +361,20 @@ export default function UserDashboard() {
                         className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all cursor-pointer group" 
                         onClick={() => {
                           if (notif.type === 'REQUEST' || isHandshake) router.push('/dashboard/missions');
+                          else if (isTimeSignal) router.push('/sessions');
                           else if (notif.link) router.push(notif.link);
                         }}
                       >
                          <div className="flex items-start gap-4">
                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                              notif.type === 'MESSAGE' && !isHandshake ? 'bg-blue-500/20' : 
-                              'bg-amber-500/20'
+                              notif.type === 'MESSAGE' && !isHandshake && !isTimeSignal ? 'bg-blue-500/20' : 
+                              isTimeSignal ? 'bg-emerald-500/20' : 'bg-amber-500/20'
                             }`}>
-                               {notif.type === 'MESSAGE' && !isHandshake ? <MessageCircle className="w-4 h-4 text-blue-400" /> : 
-                                <Zap className="w-4 h-4 text-amber-400" />}
+                               {notif.type === 'MESSAGE' && !isHandshake && !isTimeSignal ? <MessageCircle className="w-4 h-4 text-blue-400" /> : 
+                                isTimeSignal ? <CalendarDays className="w-4 h-4 text-emerald-400" /> : <Zap className="w-4 h-4 text-amber-400" />}
                             </div>
                             <div className="flex-1 min-w-0">
-                               <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">{isHandshake ? 'TUTOR REQUEST' : notif.type}</p>
+                               <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">{isHandshake ? 'TUTOR REQUEST' : isTimeSignal ? 'TIME SIGNAL' : notif.type}</p>
                                <h4 className="text-sm font-black text-white leading-tight mb-1">{notif.title}</h4>
                                <p className="text-[11px] text-white/60 font-medium truncate">{notif.content}</p>
                             </div>
