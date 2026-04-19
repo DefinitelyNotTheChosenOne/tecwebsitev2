@@ -304,8 +304,17 @@ export default function StudentSessionsPage() {
     }, 2000);
   };
 
-  useEffect(() => { msgBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
-  useEffect(() => { classBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [classMessages.length]);
+  useEffect(() => { 
+    if (activeTab === 'discussion') {
+        setTimeout(() => msgBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50); 
+    }
+  }, [messages, activeTab, selectedSession]);
+
+  useEffect(() => { 
+      if (activeTab === 'class') {
+          setTimeout(() => classBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50); 
+      }
+  }, [classMessages, activeTab, selectedSession]);
 
   // ─── Class lock logic ─────────────────────────────────────────────
   const getActiveClass = (): ScheduledClass | null => {

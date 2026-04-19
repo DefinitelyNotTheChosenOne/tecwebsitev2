@@ -314,12 +314,16 @@ export default function SessionPage() {
   };
 
   useEffect(() => { 
-    discBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); 
-  }, [discMsgs.length]);
+    if (activeTab === 'discussion') {
+      setTimeout(() => discBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+  }, [allDiscMsgs, activeTab, selectedStudent]);
 
   useEffect(() => { 
-    classBottomRef.current?.scrollIntoView({ behavior: 'smooth' }); 
-  }, [classMsgs.length]);
+    if (activeTab === 'class') {
+      setTimeout(() => classBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+  }, [allClassMsgs, activeTab, selectedStudent]);
 
   const getActiveSlot = () => {
     if (!selectedStudent) return null;
