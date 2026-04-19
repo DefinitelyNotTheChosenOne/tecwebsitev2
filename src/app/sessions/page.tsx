@@ -539,7 +539,7 @@ export default function StudentSessionsPage() {
               <div className="flex items-center gap-2 mt-1">
                 <div className={`w-1.5 h-1.5 rounded-full ${selectedSession?.status === 'accepted' ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
                 <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedSession?.status === 'accepted' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                  {selectedSession?.status === 'accepted' ? 'Connected' : 'Pending'}
+                  {selectedSession?.status === 'accepted' ? 'Connected' : 'Pending Engagement'}
                 </p>
               </div>
             </div>
@@ -584,26 +584,36 @@ export default function StudentSessionsPage() {
               <motion.div key="updates" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-4 md:px-10 py-6 md:py-10 space-y-6 md:space-y-8 custom-scroll">
                 
                 {/* Connection Status Card */}
-                {selectedSession && selectedSession.scheduledClasses.length === 0 && (
-                  <div className={`rounded-[2rem] border p-8 ${selectedSession?.status === 'accepted' ? 'bg-emerald-50/50 border-emerald-200' : selectedSession?.status === 'declined' ? 'bg-red-50/50 border-red-200' : 'bg-amber-50/50 border-amber-200'}`}>
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${selectedSession?.status === 'accepted' ? 'bg-emerald-100' : selectedSession?.status === 'declined' ? 'bg-red-100' : 'bg-amber-100'}`}>
-                        {selectedSession?.status === 'accepted' ? <CheckCircle2 className="w-7 h-7 text-emerald-600" /> : selectedSession?.status === 'declined' ? <X className="w-7 h-7 text-red-500" /> : <Clock className="w-7 h-7 text-amber-600" />}
+                {selectedSession && (
+                  <div className={`rounded-[2rem] border p-8 ${selectedSession?.status === 'accepted' ? 'bg-emerald-50/50 border-emerald-200' : selectedSession?.status === 'declined' ? 'bg-red-50/50 border-red-200' : 'bg-amber-50/50 border-amber-200 shadow-sm shadow-amber-100'}`}>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${selectedSession?.status === 'accepted' ? 'bg-emerald-100' : selectedSession?.status === 'declined' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                          {selectedSession?.status === 'accepted' ? <CheckCircle2 className="w-7 h-7 text-emerald-600" /> : selectedSession?.status === 'declined' ? <X className="w-7 h-7 text-red-500" /> : <Zap className="w-7 h-7 text-amber-600 animate-pulse" />}
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-black uppercase italic tracking-tighter text-brand-dark">
+                            {selectedSession?.status === 'accepted' ? 'Operational Line Active' : selectedSession?.status === 'declined' ? 'Request Declined' : 'Tunnel Signal Dispatched'}
+                          </h3>
+                          <p className="text-xs text-slate-500 font-medium mt-1">
+                            {selectedSession?.status === 'accepted' ? `${selectedSession.tutorName} is officially engaged. High-security communication is now active.` : selectedSession?.status === 'declined' ? 'Specialist choice is restricted. Re-evaluate your mission requirements.' : `Your tunnel request to ${selectedSession?.tutorName} is manifesting. Specialist review in progress.`}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-xl font-black uppercase italic tracking-tighter text-brand-dark">
-                          {selectedSession?.status === 'accepted' ? 'Tutor Connected' : selectedSession?.status === 'declined' ? 'Request Declined' : 'Awaiting Response'}
-                        </h3>
-                        <p className="text-xs text-slate-500 font-medium mt-1">
-                          {selectedSession?.status === 'accepted' ? `${selectedSession.tutorName} has accepted your request. You can now discuss scheduling.` : selectedSession?.status === 'declined' ? 'This tutor has declined. Try connecting with another specialist.' : `Your request has been sent to ${selectedSession?.tutorName}. They'll respond soon.`}
-                        </p>
+                      
+                      <div className="flex gap-3">
+                        {selectedSession?.status === 'accepted' ? (
+                          <button onClick={() => setActiveTab('discussion')} className="flex items-center gap-2 px-6 py-4 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-200">
+                            <MessageCircle className="w-3.5 h-3.5" /> Start Discussion
+                          </button>
+                        ) : selectedSession?.status === 'pending' ? (
+                          <div className="flex items-center gap-2 px-6 py-4 bg-white/50 border border-amber-200 rounded-xl">
+                            <Clock className="w-4 h-4 text-amber-500 rotate-12" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Awaiting Handshake</span>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                    {selectedSession?.status === 'accepted' && (
-                      <button onClick={() => setActiveTab('discussion')} className="flex items-center gap-2 px-5 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all">
-                        <MessageCircle className="w-3.5 h-3.5" /> Open Discussion
-                      </button>
-                    )}
                   </div>
                 )}
 
