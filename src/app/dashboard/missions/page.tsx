@@ -69,39 +69,51 @@ export default function SpecialistMissionBoard() {
       .select(`
         *, 
         profiles:student_id(full_name, avatar_url),
-        chat_messages(sender_id)
+        chat_messages(sender_id, created_at, content)
       `)
       .eq('tutor_id', prof.id);
 
-    // 3. Filter rooms: Hide if there's an existing class OR if specialist has already engaged (sent a message)
+    // 3. Fetch existing sessions to hide them from mission board
     const { data: existingSessions } = await supabase
       .from('tutoring_sessions')
       .select('room_id')
-      .eq('tutor_id', prof.id); // Optimized filter to prevent potential 400/large payload errors
+      .eq('tutor_id', prof.id);
     
     const sessionRoomIds = new Set((existingSessions as any[])?.filter(s => s.room_id).map(s => s.room_id) || []);
     
     const refinedDirect = (directRooms || [])
       .filter(room => {
         const hasSession = sessionRoomIds.has(room.id);
-        const hasEngaged = (room as any).chat_messages?.some((msg: any) => msg.sender_id === prof.id);
-        return !hasSession && !hasEngaged;
+        const msgs = (room as any).chat_messages || [];
+        const tutorSentMsg = msgs.some((msg: any) => msg.sender_id === prof.id);
+        
+        // Strategy: Show if no session exists AND (tutor hasn't replied OR the latest message is a new tunnel signal)
+        return !hasSession && !tutorSentMsg;
       })
-      .map(room => ({
-        ...room,
-        isDirect: true,
-        subject: "Direct Handshake",
-        title: `Direct Tunnel with ${room.profiles?.full_name || 'Student'}`,
-        description: "Student initiated a secure connection via Specialist Market Feed.",
-        created_at: room.created_at,
-        student_id: room.student_id
-      }));
+      .map(room => {
+        const studentProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
+        return {
+          ...room,
+          profiles: studentProfile, // Flatten for consistent UI access
+          isDirect: true,
+          subject: "Direct Handshake",
+          title: `Direct Tunnel with ${studentProfile?.full_name || 'Student'}`,
+          description: "Student initiated a secure connection via Specialist Market Feed.",
+          created_at: room.created_at,
+          student_id: room.student_id
+        };
+      });
 
-    setMissions([...(publicReqs || []), ...refinedDirect]);
+    const allMissions = [...refinedDirect, ...(publicReqs || [])].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    setMissions(allMissions);
     setLoading(false);
   };
 
   const channelRef = useRef<any>(null);
+  const msgChannelRef = useRef<any>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchMissionsStable = useCallback(fetchMissions, []);
@@ -110,24 +122,20 @@ export default function SpecialistMissionBoard() {
     fetchMissionsStable();
 
     // 4. Real-time Subscription for Incoming Handshaking
-    // Create channel
     const chan = supabase.channel(`missions-live-${Math.random()}`);
-    
-    chan.on('postgres_changes', { 
-      event: 'INSERT', 
-      schema: 'public', 
-      table: 'chat_rooms'
-    }, () => {
-      fetchMissions();
-    });
-
+    chan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_rooms' }, () => fetchMissions());
     chan.subscribe();
     channelRef.current = chan;
 
+    // 5. Also listen for new messages (signals in existing rooms)
+    const msgChan = supabase.channel(`missions-msgs-${Math.random()}`);
+    msgChan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, () => fetchMissions());
+    msgChan.subscribe();
+    msgChannelRef.current = msgChan;
+
     return () => { 
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (msgChannelRef.current) supabase.removeChannel(msgChannelRef.current);
     };
   }, [fetchMissionsStable]);
 
