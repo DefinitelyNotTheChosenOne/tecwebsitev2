@@ -33,19 +33,22 @@ function AuthContent() {
     if (error) {
       alert(error.message);
     } else if (user) {
-      // 🌌 SELF-HEALING REGISTRY: Manually force profile creation if trigger fails
-      const { error: upsertErr } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          full_name: fullName || 'New Specialist',
-          display_name: fullName || 'New Specialist',
-          role: 'student' // Default role
-        }, { onConflict: 'id' });
+      // 🌌 SELF-HEALING REGISTRY: Only sync if profile is actually missing
+      const { data: existing } = await supabase.from('profiles').select('id, role').eq('id', user.id).maybeSingle();
+      
+      if (!existing) {
+        const { error: upsertErr } = await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            full_name: fullName || user.email?.split('@')[0] || 'User',
+            display_name: fullName || user.email?.split('@')[0] || 'User',
+            role: 'student'
+          }, { onConflict: 'id' });
 
-      if (upsertErr) {
-        console.error("Registry Sync Failure:", upsertErr);
-        alert("Criticial: Database handshaking failed. Profile may be incomplete.");
+        if (upsertErr) {
+          console.error("Registry Sync Failure:", upsertErr);
+        }
       }
 
       // Redirect immediately
