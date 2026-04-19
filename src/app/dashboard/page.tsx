@@ -12,6 +12,30 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+const DashboardStyles = () => (
+  <style jsx global>{`
+    .custom-scroll {
+      overflow-x: hidden !important;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 4px;
+      height: 0px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 185, 0, 0.2);
+      border-radius: 20px;
+      transition: all 0.3s;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 185, 0, 0.6);
+      box-shadow: 0 0 10px rgba(255, 185, 0, 0.2);
+    }
+  `}</style>
+);
+
 export default function UserDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
@@ -22,7 +46,14 @@ export default function UserDashboard() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [signalFilter, setSignalFilter] = useState<'MESSAGE' | 'REQUEST'>('MESSAGE');
+  const [unreadCounts, setUnreadCounts] = useState<{MESSAGE: number, REQUEST: number}>({MESSAGE: 0, REQUEST: 0});
   const channelRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Clear unread count for current tab
+    setUnreadCounts(prev => ({ ...prev, [signalFilter]: 0 }));
+  }, [signalFilter]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -103,7 +134,16 @@ export default function UserDashboard() {
       table: 'notifications', 
       filter: `user_id=eq.${uid}` 
     }, (payload) => {
-      setNotifications(prev => [payload.new, ...prev].slice(0, 10));
+      const newNotif = payload.new;
+      setNotifications(prev => [newNotif, ...prev].slice(0, 10));
+      
+      const isReq = newNotif.type === 'REQUEST' || newNotif.title?.toLowerCase().includes('tunnel');
+      const type = isReq ? 'REQUEST' : 'MESSAGE';
+      
+      // Only increment if not on current tab
+      if (type !== signalFilter) {
+        setUnreadCounts(prev => ({ ...prev, [type]: prev[type] + 1 }));
+      }
     });
     
     channel.subscribe();
@@ -124,6 +164,7 @@ export default function UserDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-brand-dark overflow-x-hidden pb-24">
+      <DashboardStyles />
       <div className="bg-brand-dark relative overflow-hidden pt-8 pb-20 px-6">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-brand-primary/10 via-transparent to-transparent opacity-50" />
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between md:items-center gap-6 relative z-10">
@@ -155,7 +196,9 @@ export default function UserDashboard() {
 
       <main className="max-w-6xl mx-auto px-6 -mt-16 relative z-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-8 space-y-8">
+          
+          {/* Main Action Stack */}
+          <div className="lg:col-span-7 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[
                 { label: isTutor ? 'Available Bids' : 'Post Mission', sub: isTutor ? 'Hunt Markets' : 'Recruit Experts', icon: BookOpen, color: 'indigo', href: isTutor ? '/help-wanted' : '/help-wanted/new' },
@@ -254,32 +297,80 @@ export default function UserDashboard() {
             </section>
           </div>
 
-          <div className="lg:col-span-4 space-y-8">
-            <div className={`bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 flex flex-col h-[480px]`}>
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3 text-blue-400"><Zap className="w-5 h-5" /><span className="text-[10px] font-black uppercase tracking-[3px] text-white/60">Intelligence Signals</span></div>
-                {notifications.length > 0 && <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /><span className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Live Feed</span></div>}
+          {/* Intelligence Signal Stack - Tactical & Wide */}
+          <div className="lg:col-span-5 space-y-8">
+            <div className="bg-[#27374d] border border-white/5 rounded-[40px] p-8 flex flex-col h-[480px] shadow-2xl">
+              <div className="flex flex-col mb-8 gap-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-blue-400">
+                    <Zap className="w-5 h-5" />
+                    <span className="text-[10px] font-black uppercase tracking-[3px] text-white/60">Intelligence Signals</span>
+                  </div>
+                  {notifications.length > 0 && <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /><span className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Live Feed</span></div>}
+                </div>
+                
+                {/* Signal Type Toggle */}
+                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
+                   {(['MESSAGE', 'REQUEST'] as const).map(f => {
+                     const count = unreadCounts[f];
+                     return (
+                     <button
+                       key={f}
+                       onClick={() => setSignalFilter(f)}
+                       className={`flex-1 py-2.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all relative flex items-center justify-center gap-2 ${signalFilter === f ? 'bg-brand-primary text-brand-dark shadow-lg' : 'text-white/40 hover:text-white'}`}
+                     >
+                       {f === 'MESSAGE' ? 'Messages' : 'Tutor Requests'}
+                       {count > 0 && (
+                         <span className="bg-red-500 text-white text-[7px] font-black h-4 px-1.5 rounded-full flex items-center justify-center min-w-[16px] animate-bounce shadow-lg shadow-red-500/20">
+                           {count > 9 ? '9+' : count}
+                         </span>
+                       )}
+                     </button>
+                   )})}
+                </div>
               </div>
+
               <div className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scroll">
-                {notifications.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-20"><div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" /><p className="text-[10px] font-black uppercase tracking-[4px] text-white">Scanning Bandwidth...</p><div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" /></div>
+                {notifications.filter(n => {
+                  const isRequest = n.type === 'REQUEST' || n.title?.toLowerCase().includes('tunnel');
+                  return signalFilter === 'REQUEST' ? isRequest : !isRequest;
+                }).length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-20"><div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" /><p className="text-[10px] font-black uppercase tracking-[4px] text-white">No {signalFilter === 'MESSAGE' ? 'messages' : 'requests'} manifest...</p><div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" /></div>
                 ) : (
                   <AnimatePresence mode="popLayout">
-                    {notifications.map((notif) => (
-                      <motion.div key={notif.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all cursor-pointer group" onClick={() => notif.link && router.push(notif.link)}>
+                    {notifications.filter(n => {
+                      const isRequest = n.type === 'REQUEST' || n.title?.toLowerCase().includes('tunnel');
+                      return signalFilter === 'REQUEST' ? isRequest : !isRequest;
+                    }).map((notif) => {
+                      const isHandshake = notif.title?.toLowerCase().includes('tunnel');
+                      return (
+                      <motion.div 
+                        key={notif.id} 
+                        initial={{ opacity: 0, x: 20 }} 
+                        animate={{ opacity: 1, x: 0 }} 
+                        className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all cursor-pointer group" 
+                        onClick={() => {
+                          if (notif.type === 'REQUEST' || isHandshake) router.push('/dashboard/missions');
+                          else if (notif.link) router.push(notif.link);
+                        }}
+                      >
                          <div className="flex items-start gap-4">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${notif.type === 'MESSAGE' ? 'bg-blue-500/20' : notif.type === 'ACCEPTED' ? 'bg-emerald-500/20' : 'bg-amber-500/20'}`}>
-                               {notif.type === 'MESSAGE' ? <MessageCircle className="w-4 h-4 text-blue-400" /> : notif.type === 'ACCEPTED' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <CalendarDays className="w-4 h-4 text-amber-400" />}
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              notif.type === 'MESSAGE' && !isHandshake ? 'bg-blue-500/20' : 
+                              'bg-amber-500/20'
+                            }`}>
+                               {notif.type === 'MESSAGE' && !isHandshake ? <MessageCircle className="w-4 h-4 text-blue-400" /> : 
+                                <Zap className="w-4 h-4 text-amber-400" />}
                             </div>
                             <div className="flex-1 min-w-0">
-                               <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">{notif.type}</p>
+                               <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">{isHandshake ? 'TUTOR REQUEST' : notif.type}</p>
                                <h4 className="text-sm font-black text-white leading-tight mb-1">{notif.title}</h4>
                                <p className="text-[11px] text-white/60 font-medium truncate">{notif.content}</p>
                             </div>
                             <div className="text-[8px] font-bold text-white/20 uppercase">{new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                          </div>
                       </motion.div>
-                    ))}
+                    )})}
                   </AnimatePresence>
                 )}
               </div>
