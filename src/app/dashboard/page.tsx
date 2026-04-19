@@ -14,6 +14,12 @@ import { useRouter } from 'next/navigation';
 
 const DashboardStyles = () => (
   <style jsx global>{`
+    .signal-unread {
+      background: linear-gradient(to right, #27374d, #27374d) padding-box,
+                  linear-gradient(135deg, #ffb900 0%, transparent 100%) border-box !important;
+      border: 1px solid transparent !important;
+      box-shadow: 0 10px 30px -10px rgba(255, 185, 0, 0.15) !important;
+    }
     .custom-scroll {
       overflow-x: hidden !important;
     }
@@ -46,6 +52,7 @@ export default function UserDashboard() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [readSignals, setReadSignals] = useState<Set<string>>(new Set());
   const [signalFilter, setSignalFilter] = useState<'MESSAGE' | 'REQUEST'>('MESSAGE');
   const [unreadCounts, setUnreadCounts] = useState<{MESSAGE: number, REQUEST: number}>({MESSAGE: 0, REQUEST: 0});
   const channelRef = useRef<any>(null);
@@ -353,13 +360,18 @@ export default function UserDashboard() {
                     }).map((notif) => {
                       const isHandshake = notif.title?.toLowerCase().includes('tunnel');
                       const isTimeSignal = notif.title?.toLowerCase().includes('schedule') || notif.title?.toLowerCase().includes('class');
+                      const isUnread = !readSignals.has(notif.id);
+                      
                       return (
                       <motion.div 
                         key={notif.id} 
                         initial={{ opacity: 0, x: 20 }} 
                         animate={{ opacity: 1, x: 0 }} 
-                        className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all cursor-pointer group" 
+                        className={`p-4 rounded-2xl transition-all cursor-pointer group border ${
+                          isUnread ? 'signal-unread' : 'bg-white/5 border-white/10 hover:bg-white/10'
+                        }`}
                         onClick={() => {
+                          setReadSignals(prev => new Set([...prev, notif.id]));
                           if (notif.type === 'REQUEST' || isHandshake) router.push('/dashboard/missions');
                           else if (isTimeSignal) router.push('/sessions');
                           else if (notif.link) router.push(notif.link);
@@ -374,7 +386,10 @@ export default function UserDashboard() {
                                 isTimeSignal ? <CalendarDays className="w-4 h-4 text-emerald-400" /> : <Zap className="w-4 h-4 text-amber-400" />}
                             </div>
                             <div className="flex-1 min-w-0">
-                               <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">{isHandshake ? 'TUTOR REQUEST' : isTimeSignal ? 'TIME SIGNAL' : notif.type}</p>
+                               <div className="flex items-center gap-2 mb-1">
+                                 <p className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none">{isHandshake ? 'TUTOR REQUEST' : isTimeSignal ? 'TIME SIGNAL' : notif.type}</p>
+                                 {isUnread && <div className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse" />}
+                               </div>
                                <h4 className="text-sm font-black text-white leading-tight mb-1">{notif.title}</h4>
                                <p className="text-[11px] text-white/60 font-medium truncate">{notif.content}</p>
                             </div>
