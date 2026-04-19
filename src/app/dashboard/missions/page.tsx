@@ -48,6 +48,7 @@ export default function SpecialistMissionBoard() {
     if (!session) { router.push('/auth'); return; }
     
     const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+    if (!prof) { setLoading(false); return; }
     setProfile(prof);
     
     // 1. Fetch public help requests matching specialist's skills
