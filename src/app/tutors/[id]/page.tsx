@@ -55,11 +55,11 @@ export default function PublicTutorPortfolio() {
         link: `/dashboard/session?room=${room.id}`
       });
 
-      // 3. Optional: Initial Message
+      // 3. Official Handshake Signal
       await supabase.from('chat_messages').insert({
         room_id: room.id,
         sender_id: currentUser.id,
-        content: `SIGNAL INITIATED: Student has entered the tunnel.`
+        content: `SIGNAL INITIATED: Student has requested a specialized session.`
       });
 
       // 4. Deploy User to Terminal
