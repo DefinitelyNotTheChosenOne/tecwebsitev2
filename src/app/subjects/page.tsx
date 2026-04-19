@@ -13,19 +13,13 @@ export default function SubjectDirectory() {
   }, []);
 
   const fetchSubjects = async () => {
-    const { data } = await supabase.rpc('get_active_subjects');
-    if (data && data.length > 0) {
+    const { data } = await supabase
+      .from('system_subjects')
+      .select('*')
+      .order('name', { ascending: true });
+    
+    if (data) {
       setSubjects(data);
-    } else {
-      // Fallback display if DB not seeded
-      setSubjects([
-        { id: 1, name: 'Advanced Calculus', slug: 'advanced-calculus' },
-        { id: 2, name: 'Computer Science', slug: 'computer-science' },
-        { id: 3, name: 'Pre-Med & Nursing', slug: 'pre-med-nursing' },
-        { id: 4, name: 'Constitutional Law', slug: 'constitutional-law' },
-        { id: 5, name: 'Organic Chemistry', slug: 'organic-chemistry' },
-        { id: 6, name: 'Physics & Engineering', slug: 'physics-engineering' },
-      ]);
     }
   };
 
