@@ -350,11 +350,11 @@ export default function SessionPage() {
     return h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
   };
 
-  const isClassEnded = () => {
-    if (!selectedStudent) return false;
-    const studentSchedules = (selectedStudent as any).schedules || [];
-    const last = studentSchedules.length > 0 ? studentSchedules[studentSchedules.length - 1] : null;
-    return last && now > toDate(last.class_date, last.end_time);
+  const isClassEnded = (student: any) => {
+    const studentSchedules = student.schedules || [];
+    if (studentSchedules.length === 0) return false;
+    const last = studentSchedules[studentSchedules.length - 1];
+    return now > toDate(last.class_date, last.end_time);
   };
 
   const getTimeLeft = () => {
@@ -443,7 +443,10 @@ export default function SessionPage() {
     </div>
   );
 
-  const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.subject.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredStudents = students.filter(s => {
+    const nameMatch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.subject.toLowerCase().includes(searchQuery.toLowerCase());
+    return nameMatch && !isClassEnded(s);
+  });
 
   return (
     <div className="h-screen bg-white font-sans flex overflow-hidden">
@@ -597,13 +600,13 @@ export default function SessionPage() {
                   <div className="flex-1 flex items-center justify-center text-center">
                     <div className="max-w-md">
                       <div className="w-20 h-20 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6"><Lock className="w-8 h-8 text-amber-500" /></div>
-                      <h3 className="text-2xl font-black uppercase italic text-brand-dark mb-2">{isClassEnded() ? 'Session Terminated' : 'Terminal Locked'}</h3>
+                      <h3 className="text-2xl font-black uppercase italic text-brand-dark mb-2">{isClassEnded(selectedStudent) ? 'Session Terminated' : 'Terminal Locked'}</h3>
                       <p className="text-xs text-slate-400 uppercase font-bold tracking-widest leading-relaxed">
-                        {isClassEnded() 
+                        {isClassEnded(selectedStudent) 
                           ? 'This session has reached its full duration. Archive data is being processed.' 
                           : 'Live instruction terminal will unlock automatically at the scheduled time.'}
                       </p>
-                      {!isClassEnded() && getCountdown() && (
+                      {!isClassEnded(selectedStudent) && getCountdown() && (
                         <div className="mt-8 px-8 py-4 bg-brand-dark text-brand-primary rounded-2xl inline-block shadow-2xl">
                           <p className="text-[10px] font-black uppercase tracking-[4px] mb-1 opacity-50">Activation In</p>
                           <p className="text-3xl font-black">{getCountdown()}</p>

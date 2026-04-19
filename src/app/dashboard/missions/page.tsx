@@ -43,57 +43,73 @@ export default function SpecialistMissionBoard() {
     return () => clearInterval(interval);
   }, []);
 
+  const fetchMissions = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push('/auth'); return; }
+    
+    const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+    setProfile(prof);
+    
+    // 1. Fetch public help requests matching specialist's skills
+    const { data: publicReqs } = await supabase
+      .from('help_requests')
+      .select('*, profiles:student_id(full_name, avatar_url)')
+      .eq('status', 'open')
+      .in('subject', prof.skills || []);
+
+    // 2. Fetch direct "Tunnels" 
+    const { data: directRooms } = await supabase
+      .from('chat_rooms')
+      .select(`
+        *, 
+        profiles:student_id(full_name, avatar_url),
+        chat_messages(sender_id)
+      `)
+      .eq('tutor_id', prof.id);
+
+    // 3. Filter rooms: Hide if there's an existing class OR if specialist has already engaged (sent a message)
+    const { data: existingSessions } = await supabase
+      .from('tutoring_sessions')
+      .select('room_id');
+    
+    const sessionRoomIds = new Set(existingSessions?.map(s => s.room_id) || []);
+    
+    const refinedDirect = (directRooms || [])
+      .filter(room => {
+        const hasSession = sessionRoomIds.has(room.id);
+        const hasEngaged = (room as any).chat_messages?.some((msg: any) => msg.sender_id === prof.id);
+        return !hasSession && !hasEngaged;
+      })
+      .map(room => ({
+        ...room,
+        isDirect: true,
+        subject: "Direct Handshake",
+        title: `Direct Tunnel with ${room.profiles?.full_name || 'Student'}`,
+        description: "Student initiated a secure connection via Specialist Market Feed.",
+        created_at: room.created_at,
+        student_id: room.student_id
+      }));
+
+    setMissions([...(publicReqs || []), ...refinedDirect]);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.push('/auth'); return; }
-      
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-      setProfile(prof);
-      
-      // 1. Fetch public help requests matching specialist's skills
-      const { data: publicReqs } = await supabase
-        .from('help_requests')
-        .select('*, profiles:student_id(full_name, avatar_url)')
-        .eq('status', 'open')
-        .in('subject', prof.skills || []);
+    fetchMissions();
 
-      // 2. Fetch direct "Tunnels" 
-      const { data: directRooms } = await supabase
-        .from('chat_rooms')
-        .select(`
-          *, 
-          profiles:student_id(full_name, avatar_url),
-          chat_messages(sender_id)
-        `)
-        .eq('tutor_id', prof.id);
+    // 4. Real-time Subscription for Incoming Handshaking
+    const channel = supabase
+      .channel('missions-live')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'chat_rooms'
+      }, () => {
+        fetchMissions();
+      })
+      .subscribe();
 
-      // 3. Filter rooms: Hide if there's an existing class OR if specialist has already engaged (sent a message)
-      const { data: existingSessions } = await supabase
-        .from('tutoring_sessions')
-        .select('room_id');
-      
-      const sessionRoomIds = new Set(existingSessions?.map(s => s.room_id) || []);
-      
-      const refinedDirect = (directRooms || [])
-        .filter(room => {
-          const hasSession = sessionRoomIds.has(room.id);
-          const hasEngaged = (room as any).chat_messages?.some((msg: any) => msg.sender_id === prof.id);
-          return !hasSession && !hasEngaged;
-        })
-        .map(room => ({
-          ...room,
-          isDirect: true,
-          subject: "Direct Handshake",
-          title: `Direct Tunnel with ${room.profiles?.full_name || 'Student'}`,
-          description: "Student initiated a secure connection via Specialist Market Feed.",
-          created_at: room.created_at
-        }));
-
-      setMissions([...(publicReqs || []), ...refinedDirect]);
-      setLoading(false);
-    };
-    init();
+    return () => { channel.unsubscribe(); };
   }, [router]);
 
   const initiateDiscussion = async (mission: any) => {
@@ -120,7 +136,16 @@ export default function SpecialistMissionBoard() {
       room = newRoom;
     }
 
-    // 3. Navigate to session
+    // 3. Official specialist engagement (signals acceptance)
+    if (mission.isDirect && room) {
+      await supabase.from('chat_messages').insert({
+        room_id: room.id,
+        sender_id: profile.id,
+        content: `SIGNAL ACCEPTED: Specialist has officially opened the communication line.`
+      });
+    }
+
+    // 4. Navigate to session
     router.push('/dashboard/session');
   };
 

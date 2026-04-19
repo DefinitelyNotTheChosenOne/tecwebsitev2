@@ -353,6 +353,13 @@ export default function StudentSessionsPage() {
     return h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const isSessionEnded = (session: TutorSession) => {
+    const schedules = session.scheduledClasses || [];
+    if (schedules.length === 0) return false;
+    const last = schedules[schedules.length - 1];
+    return now > toDateTime(last.class_date, last.end_time);
+  };
+
   // ─── Send messages ────────────────────────────────────────────────
   const sendMsg = async () => {
     if (!msgInput.trim() || !selectedSession?.roomId || !currentUser) return;
@@ -423,7 +430,10 @@ export default function StudentSessionsPage() {
     </div>
   );
 
-  const filteredSessions = sessions.filter(s => s.tutorName.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredSessions = sessions.filter(s => {
+    const nameMatch = s.tutorName.toLowerCase().includes(searchQuery.toLowerCase());
+    return nameMatch && !isSessionEnded(s);
+  });
 
   // ─── Empty state ──────────────────────────────────────────────────
   if (sessions.length === 0) return (
@@ -739,6 +749,11 @@ export default function StudentSessionsPage() {
                     >
                       <Shield className="w-4 h-4" /> Review Report
                     </button>
+                  </div>
+                ) : selectedSession?.status !== 'accepted' ? (
+                  <div className="mt-4 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[2px] text-slate-400">Pending Specialist Confirmation</p>
+                    <p className="text-xs text-slate-500 font-medium mt-1">This communication line will unlock automatically when the specialist officially engages.</p>
                   </div>
                 ) : (
                   <div className="mt-4">
