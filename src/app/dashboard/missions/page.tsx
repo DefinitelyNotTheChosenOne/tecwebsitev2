@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Shield, User, ChevronLeft, 
   AlertCircle, Zap, Clock, MessageSquare
@@ -64,7 +64,7 @@ export default function SpecialistMissionBoard() {
       .in('subject', prof.skills || []);
 
     // 2. Fetch direct "Tunnels" 
-    const { data: directRooms } = await supabase
+    const { data: directRooms, error: directRoomsErr } = await supabase
       .from('chat_rooms')
       .select(`
         *, 
@@ -73,6 +73,7 @@ export default function SpecialistMissionBoard() {
       `)
       .eq('tutor_id', prof.id);
 
+    if (directRoomsErr) console.error('DIRECTROOMS ERROR:', directRoomsErr);
     // 3. Fetch existing sessions to hide them from mission board
     const { data: existingSessions } = await supabase
       .from('tutoring_sessions')
@@ -85,10 +86,16 @@ export default function SpecialistMissionBoard() {
       .filter(room => {
         const hasSession = sessionRoomIds.has(room.id);
         const msgs = (room as any).chat_messages || [];
-        const tutorSentMsg = msgs.some((msg: any) => msg.sender_id === prof.id);
         
-        // Strategy: Show if no session exists AND (tutor hasn't replied OR the latest message is a new tunnel signal)
-        return !hasSession && !tutorSentMsg;
+        // Sort to find the latest message
+        msgs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const latestMsg = msgs[0];
+        
+        // It's an active request if the very last message is an initiation signal
+        const isPendingTunnel = latestMsg && latestMsg.content.startsWith('SIGNAL INITIATED');
+        
+        // Show if no official session exists AND the latest ping is a tunnel request
+        return !hasSession && isPendingTunnel;
       })
       .map(room => {
         const studentProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
@@ -112,6 +119,7 @@ export default function SpecialistMissionBoard() {
     setLoading(false);
   };
 
+  const [toast, setToast] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
   const msgChannelRef = useRef<any>(null);
 
@@ -123,13 +131,23 @@ export default function SpecialistMissionBoard() {
 
     // 4. Real-time Subscription for Incoming Handshaking
     const chan = supabase.channel(`missions-live-${Math.random()}`);
-    chan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_rooms' }, () => fetchMissions());
+    chan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_rooms' }, () => {
+      setToast("NEW INBOUND TUNNEL DETECTED");
+      fetchMissions();
+      setTimeout(() => setToast(null), 5000);
+    });
     chan.subscribe();
     channelRef.current = chan;
 
     // 5. Also listen for new messages (signals in existing rooms)
     const msgChan = supabase.channel(`missions-msgs-${Math.random()}`);
-    msgChan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, () => fetchMissions());
+    msgChan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+      if (payload.new.content.startsWith('SIGNAL INITIATED')) {
+        setToast("NEW HANDSHAKE SIGNAL ENCRYPTED");
+        fetchMissions();
+        setTimeout(() => setToast(null), 5000);
+      }
+    });
     msgChan.subscribe();
     msgChannelRef.current = msgChan;
 
@@ -175,10 +193,35 @@ export default function SpecialistMissionBoard() {
         sender_id: profile.id,
         content: `SIGNAL ACCEPTED: Specialist has officially opened the communication line.`
       });
+      
+      // Check if session exists
+      let { data: existSess } = await supabase.from('tutoring_sessions').select('id').eq('room_id', room.id).maybeSingle();
+      if (!existSess) {
+         // Create the official tutoring session to mark as 'active' for the tutor panel
+         await supabase.from('tutoring_sessions').insert({
+           room_id: room.id,
+           tutor_id: profile.id,
+           student_id: mission.student_id,
+           status: 'accepted'
+         });
+      }
     }
 
-    // 4. Navigate to session
-    router.push('/dashboard/session');
+    // 4. Notify Student
+    await supabase.from('notifications').insert({
+      user_id: mission.student_id,
+      type: 'MESSAGE',
+      title: 'Handshake Accepted',
+      content: `Specialist ${profile.full_name} has authorized the tunnel. Enter Discussion.`,
+      link: '/sessions'
+    });
+
+    // 5. Navigate to session
+    if (room) {
+      router.push(`/dashboard/session?room=${room.id}`);
+    } else {
+      router.push('/dashboard/session');
+    }
   };
 
   const declineMission = async (mission: any) => {
@@ -190,6 +233,15 @@ export default function SpecialistMissionBoard() {
             sender_id: profile.id,
             content: "SIGNAL REJECTED: Specialist is unavailable for this session."
           });
+          
+          await supabase.from('notifications').insert({
+            user_id: mission.student_id,
+            type: 'MESSAGE',
+            title: 'Handshake Declined',
+            content: `Specialist ${profile.full_name} is unavailable. Try another market.`,
+            link: '/subjects'
+          });
+
           setMissions(prev => prev.filter(m => m.id !== mission.id));
         } else {
           // For help_requests, just dismiss locally
@@ -211,6 +263,21 @@ export default function SpecialistMissionBoard() {
     <div className="min-h-screen bg-slate-50 font-sans text-brand-dark pb-24">
       {/* ─── Header ─── */}
       <div className="bg-brand-dark text-white pt-8 pb-20 px-6 relative overflow-hidden">
+        <AnimatePresence>
+          {toast && (
+            <motion.div 
+              initial={{ y: -100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -100, opacity: 0 }}
+              className="fixed top-8 left-1/2 -translate-x-1/2 z-[3000]"
+            >
+              <div className="px-6 py-3 bg-brand-primary text-brand-dark rounded-full shadow-2xl flex items-center gap-3 border-2 border-white/20">
+                <Zap className="w-4 h-4 animate-pulse" />
+                <span className="text-[10px] font-black uppercase tracking-[3px]">{toast}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-brand-primary/10 via-transparent to-transparent opacity-50" />
         <div className="max-w-6xl mx-auto relative z-10">
           <Link href="/dashboard" className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[3px] text-white/40 hover:text-brand-primary transition-colors mb-8 group">

@@ -100,7 +100,18 @@ export default function SubjectMarketFeed() {
 
       if (msgErr) throw msgErr;
 
-      // 4. Mark as sent locally
+      // 4. Notify Specialist (Dashboard Integration)
+      const { data: studentProf } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).maybeSingle();
+      
+      await supabase.from('notifications').insert({
+        user_id: tutor.id,
+        type: 'REQUEST',
+        title: 'Tactical Tunnel Request',
+        content: `${studentProf?.full_name || 'A student'} has requested a ${subjectName} session. Check Handshake Terminal.`,
+        link: '/dashboard/missions'
+      });
+
+      // 5. Mark as sent locally
       if (!sentRequests.includes(tutor.id)) {
         setSentRequests([...sentRequests, tutor.id]);
       }
