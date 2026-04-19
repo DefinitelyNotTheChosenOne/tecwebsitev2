@@ -124,6 +124,8 @@ export default function StudentSessionsPage() {
   const msgBottomRef = useRef<HTMLDivElement>(null);
   const classBottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<any>(null);
+  const selectedSessionRef = useRef<TutorSession | null>(null);
+  const currentUserRef = useRef<any>(null);
   const [isTutorTyping, setIsTutorTyping] = useState(false);
   const typingTimeoutRef = useRef<any>(null);
 
@@ -248,35 +250,53 @@ export default function StudentSessionsPage() {
     };
     fetchMsgs();
 
-    const channel = supabase.channel(`room-${selectedSession.roomId}`);
+  // Always keep refs in sync so realtime callbacks never read stale closure values
+  useEffect(() => { selectedSessionRef.current = selectedSession; }, [selectedSession]);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+
+    const channel = supabase.channel(`room-${selectedSession.roomId}-${Math.random().toString(36).substring(7)}`);
     channelRef.current = channel;
 
     channel
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `room_id=eq.${selectedSession.roomId}`
+      }, (payload) => {
         const m = payload.new as any;
-        if (m.room_id !== selectedSession.roomId) return;
-        if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:')) return;
+        const sess = selectedSessionRef.current;
+        const user = currentUserRef.current;
+        if (!sess) return;
+        if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
           const msg: Message = {
             id: m.id,
-            sender: m.sender_id === currentUser.id ? 'student' : 'tutor',
+            sender: m.sender_id === user?.id ? 'student' : 'tutor',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           return [...prev, msg];
         });
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload) => {
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'live_class_messages',
+        filter: `room_id=eq.${selectedSession.roomId}`
+      }, (payload) => {
         const m = payload.new as any;
-        if (m.room_id !== selectedSession.roomId) return;
+        const sess = selectedSessionRef.current;
+        const user = currentUserRef.current;
+        if (!sess) return;
         
         setClassMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
           const msg: Message = {
             id: m.id,
-            sender: m.sender_id === currentUser.id ? 'student' : 'tutor',
+            sender: m.sender_id === user?.id ? 'student' : 'tutor',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
@@ -285,12 +305,13 @@ export default function StudentSessionsPage() {
       })
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        const otherTyping = Object.values(state).flat().some((u: any) => u.user_id !== currentUser?.id && u.typing);
+        const user = currentUserRef.current;
+        const otherTyping = Object.values(state).flat().some((u: any) => u.user_id !== user?.id && u.typing);
         setIsTutorTyping(otherTyping);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: currentUser?.id, typing: false });
+          await channel.track({ user_id: currentUserRef.current?.id, typing: false });
         }
       });
 
