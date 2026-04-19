@@ -138,23 +138,28 @@ export default function SessionPage() {
     if (!confirm(`Are you sure you want to permanently delete the session with ${studentName}? This will clear all schedules and history.`)) return;
     
     try {
-      // 1. Delete scheduled classes
-      await supabase.from('scheduled_classes').delete().eq('room_id', roomId);
-      // 2. Delete the tutoring session record
-      await supabase.from('tutoring_sessions').delete().eq('room_id', roomId);
+      // 1. PURGE SCHEDULES
+      const { error: err1 } = await supabase.from('scheduled_classes').delete().eq('room_id', roomId);
+      if (err1) throw err1;
+
+      // 2. PURGE SESSION
+      const { error: err2 } = await supabase.from('tutoring_sessions').delete().eq('room_id', roomId);
+      if (err2) throw err2;
       
-      // 3. SECURE PURGE: Delete chat history and the tunnel itself
-      // First clear messages to avoid FK issues
-      await supabase.from('chat_messages').delete().eq('room_id', roomId);
-      // Then terminate the room
-      await supabase.from('chat_rooms').delete().eq('id', roomId);
+      // 3. GLOBAL PURGE: Delete chat messages first
+      const { error: err3 } = await supabase.from('chat_messages').delete().eq('room_id', roomId);
+      if (err3) throw err3;
+
+      // 4. TERMINATE TUNNEL: Delete the room record
+      const { error: err4 } = await supabase.from('chat_rooms').delete().eq('id', roomId);
+      if (err4) throw err4;
       
-      // 4. UI Update
+      // 5. UI SYNC
       setStudents(prev => prev.filter(s => s.roomId !== roomId));
       if (selectedStudent?.roomId === roomId) {
         setSelectedStudent(null);
       }
-      alert("Mission & Global Tunnel Purged Successfully.");
+      alert(`PURGE COMPLETE: Student "${studentName}" has been removed from the database.`);
     } catch (err) {
       console.error(err);
       alert("Critical: Termination Signal Failed.");
