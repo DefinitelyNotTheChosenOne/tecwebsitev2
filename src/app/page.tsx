@@ -52,7 +52,9 @@ export default function Home() {
       .single();
     if (data) {
       setProfile(data);
-      if (data.role === 'seller') {
+      if (data.role === 'admin') {
+        router.replace('/admin/dashboard');
+      } else if (data.role === 'seller') {
         router.replace('/dashboard');
       }
     }

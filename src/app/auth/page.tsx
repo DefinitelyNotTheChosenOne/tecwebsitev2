@@ -33,10 +33,19 @@ function AuthContent() {
     if (error) {
       alert(error.message);
     } else {
-      const destination = redirect 
-        ? `${redirect}${redirect.includes('?') ? '&' : '?'}redirected=true` 
-        : '/dashboard';
-      window.location.href = destination;
+      const { data: prof } = await supabase.from('profiles').select('role').eq('id', user?.id).single();
+      
+      if (prof) {
+        if (prof.role === 'admin') {
+          router.replace('/admin/dashboard');
+        } else {
+          let destination = '/dashboard';
+          if (redirect) {
+            destination = `${redirect}${redirect.includes('?') ? '&' : '?'}redirected=true`;
+          }
+          window.location.href = destination;
+        }
+      }
     }
     setIsLoading(false);
   };
