@@ -181,7 +181,9 @@ export default function SessionPage() {
     const interval = setInterval(() => setNow(new Date()), 1000);
 
     // REAL-TIME PURGE SYNC: Detect deletions from other devices
-    const syncChannel = supabase.channel('global-purge-sync')
+    const syncChannel = supabase.channel('global-purge-sync');
+    
+    syncChannel
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_rooms' }, (payload) => {
          const deletedId = payload.old.id;
          setStudents(prev => prev.filter(s => s.roomId !== deletedId));
