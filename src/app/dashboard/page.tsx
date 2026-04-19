@@ -95,11 +95,18 @@ export default function UserDashboard() {
   const subscribeToSignals = (uid: string) => {
     const channel = supabase.channel(`signals-${uid}`);
     
-    channel
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, (payload) => {
-        setNotifications(prev => [payload.new, ...prev].slice(0, 10));
-      })
-      .subscribe();
+    // Define signal listener first
+    channel.on('postgres_changes', { 
+      event: 'INSERT', 
+      schema: 'public', 
+      table: 'notifications', 
+      filter: `user_id=eq.${uid}` 
+    }, (payload) => {
+      setNotifications(prev => [payload.new, ...prev].slice(0, 10));
+    });
+    
+    // Subscribe in separate phase
+    channel.subscribe();
 
     return channel;
   };

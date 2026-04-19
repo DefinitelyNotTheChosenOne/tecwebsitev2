@@ -110,16 +110,22 @@ export default function SpecialistMissionBoard() {
     // 4. Real-time Subscription for Incoming Handshaking
     const channel = supabase.channel('missions-live');
     
-    channel
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'chat_rooms'
-      }, () => {
-        // Trigger a fresh fetch when a new room is detected
-        fetchMissions();
-      })
-      .subscribe();
+    // Explicitly define listeners BEFORE calling subscribe
+    channel.on('postgres_changes', { 
+      event: 'INSERT', 
+      schema: 'public', 
+      table: 'chat_rooms'
+    }, () => {
+      // Trigger a fresh fetch when a new room is detected
+      fetchMissions();
+    });
+
+    // Start the subscription in a separate step
+    channel.subscribe((status) => {
+       if (status === 'SUBSCRIBED') {
+         console.log('Operational Handshake System: Online');
+       }
+    });
 
     return () => { 
       supabase.removeChannel(channel);
