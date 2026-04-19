@@ -128,7 +128,23 @@ export default function UserDashboard() {
       .eq('user_id', uid)
       .order('created_at', { ascending: false })
       .limit(10);
-    if (data) setNotifications(data);
+    if (data) {
+      setNotifications(data);
+      
+      // Calculate initial unread counts for non-read signals
+      const counts = { MESSAGE: 0, REQUEST: 0 };
+      data.forEach(n => {
+        if (!readSignals.has(n.id)) {
+          const tunnel = n.title?.toLowerCase().includes('tunnel');
+          const sched = n.title?.toLowerCase().includes('schedule');
+          
+          if (isTutor && tunnel) counts.REQUEST++;
+          else if (!isTutor && sched) counts.REQUEST++;
+          else counts.MESSAGE++;
+        }
+      });
+      setUnreadCounts(counts);
+    }
   };
 
   const subscribeToSignals = (uid: string) => {
@@ -233,7 +249,14 @@ export default function UserDashboard() {
                     <div className="absolute top-0 right-0 w-80 h-80 bg-brand-primary/20 blur-[100px] rounded-full translate-x-12 -translate-y-12" />
                     <div className="relative z-10 flex flex-col">
                       <div className="flex justify-between items-start mb-16">
-                        <div className="p-5 bg-brand-primary text-brand-dark rounded-3xl group-hover:rotate-12 transition-transform"><Zap className="w-10 h-10" /></div>
+                        <div className="p-5 bg-brand-primary text-brand-dark rounded-3xl group-hover:rotate-12 transition-transform relative">
+                          <Zap className="w-10 h-10" />
+                          {unreadCounts.REQUEST > 0 && (
+                            <div className="absolute -top-2 -right-2 px-3 py-1 bg-red-500 text-white text-[8px] font-black rounded-lg animate-bounce shadow-xl">
+                              {unreadCounts.REQUEST} ACTIVE SIGNALS
+                            </div>
+                          )}
+                        </div>
                         <div className="text-right">
                           <span className="px-5 py-2 bg-white/5 border border-white/10 text-brand-primary text-[10px] font-black uppercase tracking-[4px] rounded-full">Strategic Access</span>
                         </div>

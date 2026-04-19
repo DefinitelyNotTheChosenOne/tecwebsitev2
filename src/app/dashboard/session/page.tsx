@@ -204,26 +204,42 @@ export default function SessionPage() {
 
       const activeRoomIds = new Set(firstMsgs?.map(m => m.room_id) || []);
 
-      const studentList = (rooms || [])
-        .filter((room: any) => activeRoomIds.has(room.id) || room.id === targetRoomId) // Ensure target room is shown even if empty
-        .map((room: any) => {
+      const studentList = await Promise.all((rooms || [])
+        .filter((room: any) => activeRoomIds.has(room.id) || room.id === targetRoomId) 
+        .map(async (room: any) => {
           const session = sessData?.find(s => s.student_id === room.student_id) as any;
           const name = (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.full_name || 'Anonymous Student';
           const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
           
+          let subject = session?.help_requests?.subject;
+          
+          // Fallback for direct tunnels: Parse subject from the initial signal message
+          if (!subject) {
+             const { data: signalMsg } = await supabase
+               .from('chat_messages')
+               .select('content')
+               .eq('room_id', room.id)
+               .ilike('content', 'discussion started for%')
+               .maybeSingle();
+             
+             if (signalMsg) {
+                subject = signalMsg.content.split('"')[1] || signalMsg.content.split('for ')[1];
+             }
+          }
+
           return {
             id: room.student_id,
             roomId: room.id,
             name: name,
-            subject: session?.help_requests?.subject || 'General Discussion',
+            subject: subject || 'General Discussion',
             initial: name.charAt(0).toUpperCase(),
             lastMsg: '...', 
-            status: session?.status === 'accepted' ? 'active' : 'pending',
+            status: (session?.status === 'accepted' ? 'active' : 'pending') as 'active' | 'pending',
             lastActive: 'Just now',
             schedules: roomSchedules,
-            isAccepted: session?.status === 'accepted'
-          } as any;
-        });
+            isAccepted: session?.status === 'accepted' || !!session
+          };
+        }));
 
       setStudents(studentList);
       
@@ -422,7 +438,10 @@ export default function SessionPage() {
   const isClassEnded = (student: any) => {
     if (!student) return false;
     const studentSchedules = student.schedules || [];
-    if (studentSchedules.length === 0) return true; // Treat as ended if no schedules yet to allow history view
+    // If no schedules are created yet, it's a new discussion/pending session, so it's NOT ended.
+    if (studentSchedules.length === 0) return false; 
+    
+    // It's only ended if the last schedule is in the past
     const last = studentSchedules[studentSchedules.length - 1];
     return now > toDate(last.class_date, last.end_time);
   };

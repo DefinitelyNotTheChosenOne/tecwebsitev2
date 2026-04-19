@@ -191,7 +191,7 @@ export default function SpecialistMissionBoard() {
       await supabase.from('chat_messages').insert({
         room_id: room.id,
         sender_id: profile.id,
-        content: `SIGNAL ACCEPTED: Specialist has officially opened the communication line.`
+        content: `discussion started for "${mission.subject}"`
       });
       
       // Check if session exists
