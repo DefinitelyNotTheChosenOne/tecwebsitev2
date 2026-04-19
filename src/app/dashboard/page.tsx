@@ -315,7 +315,7 @@ export default function UserDashboard() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 text-blue-400">
                     <Zap className="w-5 h-5" />
-                    <span className="text-[10px] font-black uppercase tracking-[3px] text-white/60">Intelligence Signals</span>
+                    <span className="text-[10px] font-black uppercase tracking-[3px] text-white/60">Notifications</span>
                   </div>
                   {notifications.length > 0 && <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /><span className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Live Feed</span></div>}
                 </div>
