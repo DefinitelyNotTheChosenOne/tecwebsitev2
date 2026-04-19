@@ -13,14 +13,42 @@ export default function SubjectDirectory() {
   }, []);
 
   const fetchSubjects = async () => {
-    const { data } = await supabase
+    // STEP 1: Find all unique subjects that sellers have claimed in their skills array
+    const { data: sellers } = await supabase
+      .from('profiles')
+      .select('skills')
+      .eq('role', 'seller')
+      .not('skills', 'is', null);
+
+    if (!sellers || sellers.length === 0) {
+      setSubjects([]);
+      return;
+    }
+
+    // Flatten and deduplicate all claimed skills into a unique set
+    const claimedSubjectNames = new Set<string>(
+      sellers.flatMap((s: any) => s.skills || [])
+    );
+
+    if (claimedSubjectNames.size === 0) {
+      setSubjects([]);
+      return;
+    }
+
+    // STEP 2: Cross-reference with system_subjects to get proper metadata (slug, description, icon)
+    const { data: systemSubjects } = await supabase
       .from('system_subjects')
       .select('*')
+      .in('name', Array.from(claimedSubjectNames))
       .order('name', { ascending: true });
-    
-    if (data) {
-      setSubjects(data);
-    }
+
+    // STEP 3: Fallback — if a claimed skill has no system_subjects entry, still show it
+    const systemNames = new Set((systemSubjects || []).map((s: any) => s.name));
+    const orphanSubjects = Array.from(claimedSubjectNames)
+      .filter(name => !systemNames.has(name))
+      .map(name => ({ id: name, name, slug: name.toLowerCase().replace(/\s+/g, '-') }));
+
+    setSubjects([...(systemSubjects || []), ...orphanSubjects]);
   };
 
   return (

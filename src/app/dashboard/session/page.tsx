@@ -559,14 +559,40 @@ export default function SessionPage() {
     const content = discInput.trim(); 
     setDiscInput('');
 
-    const { error } = await supabase.from('chat_messages').insert({ 
+    // Optimistic update — show immediately without waiting for realtime echo
+    const optimisticId = `opt-${Date.now()}`;
+    const optimisticMsg: Message = {
+      id: optimisticId as any,
+      sender: 'tutor',
+      text: content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setAllDiscMsgs(prev => ({
+      ...prev,
+      [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optimisticMsg]
+    }));
+
+    const { data, error } = await supabase.from('chat_messages').insert({ 
       room_id: selectedStudent.roomId, 
       sender_id: currentUser.id, 
       content 
-    });
+    }).select().single();
 
     if (error) {
-       console.error("Signal Failed:", error.message);
+      console.error("Signal Failed:", error.message);
+      // Rollback optimistic message on failure
+      setAllDiscMsgs(prev => ({
+        ...prev,
+        [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== (optimisticId as any))
+      }));
+    } else if (data) {
+      // Replace optimistic ID with real DB ID to prevent duplicates from realtime echo
+      setAllDiscMsgs(prev => ({
+        ...prev,
+        [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => 
+          m.id === (optimisticId as any) ? { ...m, id: data.id } : m
+        )
+      }));
     }
   };
 
@@ -575,14 +601,38 @@ export default function SessionPage() {
     const content = classInput.trim(); 
     setClassInput('');
 
-    const { error } = await supabase.from('live_class_messages').insert({
+    // Optimistic update
+    const optimisticId = `opt-${Date.now()}`;
+    const optimisticMsg: Message = {
+      id: optimisticId as any,
+      sender: 'tutor',
+      text: content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setAllClassMsgs(prev => ({
+      ...prev,
+      [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optimisticMsg]
+    }));
+
+    const { data, error } = await supabase.from('live_class_messages').insert({
       room_id: selectedStudent.roomId,
       sender_id: currentUser.id,
       content
-    });
+    }).select().single();
 
     if (error) {
       console.error("Signal Failed:", error.message);
+      setAllClassMsgs(prev => ({
+        ...prev,
+        [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== (optimisticId as any))
+      }));
+    } else if (data) {
+      setAllClassMsgs(prev => ({
+        ...prev,
+        [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => 
+          m.id === (optimisticId as any) ? { ...m, id: data.id } : m
+        )
+      }));
     }
   };
 
