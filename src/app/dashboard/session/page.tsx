@@ -107,7 +107,7 @@ export default function SessionPage() {
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<Tab>('class');
+  const [activeTab, setActiveTab] = useState<Tab>('discussion');
   const [sidebarFilter, setSidebarFilter] = useState<'active' | 'past'>('active');
   const [now, setNow] = useState(new Date());
 
@@ -219,7 +219,7 @@ export default function SessionPage() {
                .from('chat_messages')
                .select('content')
                .eq('room_id', room.id)
-               .ilike('content', 'discussion started for%')
+               .ilike('content', 'Discussion Started for%')
                .maybeSingle();
              
              if (signalMsg) {
@@ -563,7 +563,7 @@ export default function SessionPage() {
                return (finished || !s.isAccepted) && matchesSearch;
             }
           }).map(s => (
-            <button key={s.id} onClick={() => { setSelectedStudent(s); setActiveTab('class'); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
+            <button key={s.id} onClick={() => { setSelectedStudent(s); setActiveTab('discussion'); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
               <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-black ${selectedStudent?.id === s.id ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>{s.initial}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start mb-0.5">
