@@ -134,36 +134,22 @@ export default function SessionPage() {
   const [isStudentTyping, setIsStudentTyping] = useState(false);
   const typingTimeoutRef = useRef<any>(null);
 
-  const deleteSession = async (roomId: string, studentName: string) => {
-    if (!confirm(`Are you sure you want to permanently delete the session with ${studentName}? This will clear all schedules and history.`)) return;
+  const deleteSession = (roomId: string, studentName: string) => {
+    if (!confirm(`Are you sure you want to terminate the mission with ${studentName}?`)) return;
     
-    try {
-      // 1. PURGE SCHEDULES
-      const { error: err1 } = await supabase.from('scheduled_classes').delete().eq('room_id', roomId);
-      if (err1) throw err1;
-
-      // 2. PURGE SESSION
-      const { error: err2 } = await supabase.from('tutoring_sessions').delete().eq('room_id', roomId);
-      if (err2) throw err2;
-      
-      // 3. GLOBAL PURGE: Delete chat messages first
-      const { error: err3 } = await supabase.from('chat_messages').delete().eq('room_id', roomId);
-      if (err3) throw err3;
-
-      // 4. TERMINATE TUNNEL: Delete the room record
-      const { error: err4 } = await supabase.from('chat_rooms').delete().eq('id', roomId);
-      if (err4) throw err4;
-      
-      // 5. UI SYNC
-      setStudents(prev => prev.filter(s => s.roomId !== roomId));
-      if (selectedStudent?.roomId === roomId) {
-        setSelectedStudent(null);
-      }
-      alert(`PURGE COMPLETE: Student "${studentName}" has been removed from the database.`);
-    } catch (err) {
-      console.error(err);
-      alert("Critical: Termination Signal Failed.");
+    // We use localStorage to permanently hide these rooms from the specialist view
+    // because hard-deleting rooms can fail due to database foreign-key constraints
+    const terminated = JSON.parse(localStorage.getItem('terminated_missions') || '[]');
+    if (!terminated.includes(roomId)) {
+      terminated.push(roomId);
+      localStorage.setItem('terminated_missions', JSON.stringify(terminated));
     }
+
+    setStudents(prev => prev.filter(s => s.roomId !== roomId));
+    if (selectedStudent?.roomId === roomId) {
+      setSelectedStudent(null);
+    }
+    alert(`MISSION TERMINATED: "${studentName}" has been removed from your workspace.`);
   };
 
   useEffect(() => {
@@ -284,15 +270,19 @@ export default function SessionPage() {
           };
         }));
 
-      setStudents(studentList);
+      // Apply persistent termination filter (localStorage)
+      const terminated = JSON.parse(localStorage.getItem('terminated_missions') || '[]');
+      const filteredList = studentList.filter(s => !terminated.includes(s.roomId));
+
+      setStudents(filteredList);
       
       // Critical Fix: Sync the selected student with the fresh data
-      if (studentList.length > 0) {
+      if (filteredList.length > 0) {
         if (targetRoomId) {
-          const target = studentList.find(s => s.roomId === targetRoomId);
+          const target = filteredList.find(s => s.roomId === targetRoomId);
           if (target) setSelectedStudent(target);
         } else if (selectedStudent) {
-          const fresh = studentList.find(s => s.id === selectedStudent.id);
+          const fresh = filteredList.find(s => s.id === selectedStudent.id);
           if (fresh) setSelectedStudent(fresh);
         }
       }
