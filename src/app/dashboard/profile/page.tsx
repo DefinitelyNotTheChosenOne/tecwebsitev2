@@ -18,15 +18,20 @@ export default function ProfileEditor() {
   const [profile, setProfile] = useState<any>(null);
   const [resume, setResume] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [systemSubjects, setSystemSubjects] = useState<any[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push('/auth'); return; }
-      supabase.from('profiles').select('*').eq('id', session.user.id).single()
-        .then(({ data: prof }) => {
-          setProfile(prof || {});
-          setLoading(false);
-        });
+      
+      Promise.all([
+        supabase.from('profiles').select('*').eq('id', session.user.id).single(),
+        supabase.from('system_subjects').select('*').order('name')
+      ]).then(([ { data: prof }, { data: subjs } ]) => {
+        setProfile(prof || {});
+        setSystemSubjects(subjs || []);
+        setLoading(false);
+      });
     });
   }, [router]);
 
@@ -38,7 +43,8 @@ export default function ProfileEditor() {
       .update({
         full_name: profile.full_name,
         bio: profile.bio,
-        avatar_url: profile.avatar_url
+        avatar_url: profile.avatar_url,
+        skills: profile.skills || []
       })
       .eq('id', profile.id);
 
@@ -157,6 +163,43 @@ export default function ProfileEditor() {
                 className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl text-sm font-bold focus:border-brand-primary transition-all outline-none h-32 resize-none"
                 placeholder="Declare your expertise and history..."
               />
+            </div>
+
+            <div className="space-y-4">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">Specialized Dependencies (Subjects)</label>
+              {profile.role === 'seller' ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                   {systemSubjects.map(sub => {
+                     const isSelected = (profile.skills || []).includes(sub.name);
+                     return (
+                       <label key={sub.id} className={`p-4 border rounded-2xl cursor-pointer hover:border-brand-primary transition-all flex flex-col gap-2 ${isSelected ? 'border-brand-primary bg-brand-primary/5' : 'border-slate-100 bg-slate-50'}`}>
+                         <input 
+                           type="checkbox" 
+                           className="hidden"
+                           checked={isSelected}
+                           onChange={(e) => {
+                             const newSkills = e.target.checked 
+                               ? [...(profile.skills || []), sub.name]
+                               : (profile.skills || []).filter((s: string) => s !== sub.name);
+                             setProfile({...profile, skills: newSkills});
+                           }}
+                         />
+                         <div className={`w-5 h-5 rounded-md flex items-center justify-center border ${isSelected ? 'bg-brand-primary border-brand-primary' : 'bg-white border-slate-200'}`}>
+                            {isSelected && <CheckCircle2 className="w-3 h-3 text-brand-dark" />}
+                         </div>
+                         <span className="text-[10px] font-black uppercase tracking-widest text-brand-dark leading-snug">{sub.name}</span>
+                       </label>
+                     );
+                   })}
+                   {systemSubjects.length === 0 && (
+                     <div className="col-span-full p-4 border border-dashed border-slate-200 rounded-xl text-[10px] font-bold text-slate-400 uppercase">No subjects deployed by admins yet.</div>
+                   )}
+                </div>
+              ) : (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Upgrade to Specialist to manifest capabilities.
+                </div>
+              )}
             </div>
 
             <button 

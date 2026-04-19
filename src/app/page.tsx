@@ -17,6 +17,7 @@ export default function Home() {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [supportThreadCount, setSupportThreadCount] = useState(0);
+  const [activeSubjects, setActiveSubjects] = useState<any[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -27,7 +28,13 @@ export default function Home() {
       }
     });
     fetchServices();
+    fetchActiveSubjects();
   }, []);
+
+  const fetchActiveSubjects = async () => {
+    const { data } = await supabase.rpc('get_active_subjects');
+    if (data && data.length > 0) setActiveSubjects(data);
+  };
 
   const fetchSupportCount = async () => {
     const { data } = await supabase.from('admin_messages').select('user_id');
@@ -201,7 +208,7 @@ export default function Home() {
             }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
           >
-          {fallbackSubjects.map((sub, i) => (
+          {(activeSubjects.length > 0 ? activeSubjects : fallbackSubjects).map((sub, i) => (
             <Link key={i} href={session ? `/subjects/${sub.slug}` : `/auth?redirect=/subjects/${sub.slug}`}>
               <motion.div 
                 variants={{
@@ -217,7 +224,7 @@ export default function Home() {
                 
                 <div className="flex-1 flex flex-col">
                   <h3 className="text-3xl font-black italic mb-4 leading-tight tracking-tighter group-hover:text-brand-primary transition-colors uppercase">{sub.name}</h3>
-                  <p className="text-sm font-medium text-zinc-500 uppercase tracking-widest mb-10">{sub.desc || 'Specialist Mentoring'}</p>
+                  <p className="text-sm font-medium text-zinc-500 uppercase tracking-widest mb-10">{sub.description || sub.desc || 'Specialist Mentoring'}</p>
                   
                   <div className="mt-auto pt-8 border-t border-white/5 flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest text-brand-secondary group-hover:text-white transition-colors">Enter Market</span>

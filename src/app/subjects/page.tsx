@@ -13,7 +13,7 @@ export default function SubjectDirectory() {
   }, []);
 
   const fetchSubjects = async () => {
-    const { data } = await supabase.from('categories').select('*').order('name');
+    const { data } = await supabase.rpc('get_active_subjects');
     if (data && data.length > 0) {
       setSubjects(data);
     } else {

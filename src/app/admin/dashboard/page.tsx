@@ -110,7 +110,7 @@ export default function AdminDashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20"
       >
-        <Link href="/admin/subjects/new" className="p-8 bg-brand-primary hover:bg-brand-secondary transition-all rounded-[2.5rem] flex items-center justify-between group shadow-2xl">
+        <Link href="/admin/subjects" className="p-8 bg-brand-primary hover:bg-brand-secondary transition-all rounded-[2.5rem] flex items-center justify-between group shadow-2xl">
           <div className="flex items-center gap-6">
             <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
                <PlusCircle className="w-8 h-8 text-white group-hover:scale-110 transition-transform" />
