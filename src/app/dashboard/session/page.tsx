@@ -135,7 +135,10 @@ export default function SessionPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/auth'); return; }
       setCurrentUser(session.user);
-      fetchSessions(session.user.id);
+      
+      const searchParams = new URLSearchParams(window.location.search);
+      const roomParam = searchParams.get('room');
+      await fetchSessions(session.user.id, roomParam);
     };
     init();
 
@@ -143,7 +146,7 @@ export default function SessionPage() {
     return () => clearInterval(interval);
   }, [router]);
 
-  const fetchSessions = async (userId: string) => {
+  const fetchSessions = async (userId: string, targetRoomId?: string | null) => {
     try {
       const { data: rooms, error: roomErr } = await supabase
         .from('chat_rooms')
@@ -151,6 +154,13 @@ export default function SessionPage() {
         .eq('tutor_id', userId);
 
       if (roomErr) throw roomErr;
+
+      // Handle the "no rooms" case early
+      if (!rooms || rooms.length === 0) {
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
 
       const { data: sessData } = await supabase
         .from('tutoring_sessions')
@@ -163,29 +173,43 @@ export default function SessionPage() {
         .eq('tutor_id', userId);
 
       // Map rooms to StudentProfile objects
-      const studentList = (rooms || []).map((room: any) => {
-        const session = sessData?.find(s => s.student_id === room.student_id);
-        const name = (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.full_name || 'Anonymous Student';
-        const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
-        
-        return {
-          id: room.student_id,
-          roomId: room.id,
-          name: name,
-          subject: (session?.help_requests as any)?.subject || 'General Discussion',
-          initial: name.charAt(0).toUpperCase(),
-          lastMsg: '...', 
-          status: 'active',
-          lastActive: 'Just now',
-          schedules: roomSchedules
-        } as any;
-      });
+      // RUTHLESS FILTER: Only show students who have actually sent a tunnel message
+      const { data: firstMsgs } = await supabase
+        .from('chat_messages')
+        .select('room_id')
+        .in('room_id', rooms.map(r => r.id));
+
+      const activeRoomIds = new Set(firstMsgs?.map(m => m.room_id) || []);
+
+      const studentList = (rooms || [])
+        .filter((room: any) => activeRoomIds.has(room.id) || room.id === targetRoomId) // Ensure target room is shown even if empty
+        .map((room: any) => {
+          const session = sessData?.find(s => s.student_id === room.student_id);
+          const name = (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.full_name || 'Anonymous Student';
+          const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
+          
+          return {
+            id: room.student_id,
+            roomId: room.id,
+            name: name,
+            subject: (session?.help_requests as any)?.subject || 'General Discussion',
+            initial: name.charAt(0).toUpperCase(),
+            lastMsg: '...', 
+            status: 'active',
+            lastActive: 'Just now',
+            schedules: roomSchedules
+          } as any;
+        });
 
       setStudents(studentList);
       
-      // Critical Fix: Sync the selected student with the fresh data (including schedules)
+      // Critical Fix: Sync the selected student with the fresh data
       if (studentList.length > 0) {
-        if (!selectedStudent) {
+        if (targetRoomId) {
+          const target = studentList.find(s => s.roomId === targetRoomId);
+          if (target) setSelectedStudent(target);
+          else setSelectedStudent(studentList[0]);
+        } else if (!selectedStudent) {
           setSelectedStudent(studentList[0]);
         } else {
           const fresh = studentList.find(s => s.id === selectedStudent.id);
