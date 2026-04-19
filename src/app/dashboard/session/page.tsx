@@ -215,21 +215,26 @@ export default function SessionPage() {
           let subject = session?.help_requests?.subject;
           
           // Always fetch the latest discussion signal to check for re-opened sessions
-          const { data: signalMsg } = await supabase
+          // We broaden the filter to catch ANY form of accept/initiate signal sent by the tutor or student to re-open the negotiation
+          const { data: signalMsgs } = await supabase
             .from('chat_messages')
             .select('content, created_at')
             .eq('room_id', room.id)
-            .ilike('content', 'Discussion Started for%')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+            .order('created_at', { ascending: false });
             
           let latestSignalTime = null;
-          if (signalMsg) {
-             if (!subject) {
-               subject = signalMsg.content.split('"')[1] || signalMsg.content.split('for ')[1];
+          if (signalMsgs && signalMsgs.length > 0) {
+             const latestSystemMsg = signalMsgs.find(m => 
+               m.content.toLowerCase().includes('discussion started') || 
+               m.content.toLowerCase().includes('signal ')
+             );
+             
+             if (latestSystemMsg) {
+                if (!subject) {
+                  subject = latestSystemMsg.content.split('"')[1] || latestSystemMsg.content.split('for ')[1];
+                }
+                latestSignalTime = new Date(latestSystemMsg.created_at).getTime();
              }
-             latestSignalTime = new Date(signalMsg.created_at).getTime();
           }
 
           return {
@@ -243,7 +248,7 @@ export default function SessionPage() {
             lastActive: 'Just now',
             schedules: roomSchedules,
             latestSignalTime,
-            isAccepted: session?.status === 'accepted' || !!session
+            isAccepted: session?.status === 'accepted' || !!session || !!latestSignalTime
           };
         }));
 
@@ -443,23 +448,26 @@ export default function SessionPage() {
 
   const isClassEnded = (student: any) => {
     if (!student) return false;
-    const studentSchedules = student.schedules || [];
-    // If no schedules are created yet, it's a new discussion/pending session, so it's NOT ended.
+    const studentSchedules = [...(student.schedules || [])];
     if (studentSchedules.length === 0) return false; 
     
-    // Check if the last schedule is in the past
+    // Ensure chronological sorting of schedules
+    studentSchedules.sort((a, b) => {
+       const aTime = toDate(a.class_date, a.end_time).getTime();
+       const bTime = toDate(b.class_date, b.end_time).getTime();
+       return aTime - bTime;
+    });
+
     const last = studentSchedules[studentSchedules.length - 1];
     const lastEndTime = toDate(last.class_date, last.end_time).getTime();
     
-    // If the schedule is over, but there's a new signal AFTER it, they are active again!
-    if (now.getTime() > lastEndTime) {
-       if (student.latestSignalTime && student.latestSignalTime > lastEndTime) {
-         return false;
-       }
-       return true;
+    // If we have a newer signal AFTER the last class ended, they are active.
+    if (student.latestSignalTime && student.latestSignalTime > lastEndTime) {
+       return false;
     }
-    
-    return false;
+
+    // Otherwise, check if the last schedule's time is in the past
+    return now.getTime() > lastEndTime;
   };
 
   const getTimeLeft = () => {
@@ -584,9 +592,18 @@ export default function SessionPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start mb-0.5">
                   <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p>
-                  {isClassEnded(s) && <span className="text-[7px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded uppercase">FIN</span>}
+                  {isClassEnded(s) ? (
+                    <span className="text-[7px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded uppercase">FIN</span>
+                  ) : null}
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary leading-none">{s.subject}</p>
+                <div className="flex justify-between items-center">
+                  <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary leading-none">{s.subject}</p>
+                </div>
+                {/* DEBUG BLOCK */}
+                <div className="text-[7px] text-slate-400 mt-1">
+                  End: {s.schedules?.length ? toDate(s.schedules[s.schedules.length - 1].class_date, s.schedules[s.schedules.length - 1].end_time).getTime() : 'None'} <br/>
+                  Sig: {s.latestSignalTime || 'None'}
+                </div>
               </div>
             </button>
           ))}
