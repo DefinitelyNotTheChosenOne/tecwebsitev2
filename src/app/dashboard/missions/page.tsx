@@ -47,8 +47,13 @@ export default function SpecialistMissionBoard() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/auth'); return; }
     
-    const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-    if (!prof) { setLoading(false); return; }
+    const { data: prof, error: profErr } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+    
+    if (profErr || !prof) { 
+      console.error("Critical: Profile Resolution Failure");
+      setLoading(false); 
+      return; 
+    }
     setProfile(prof);
     
     // 1. Fetch public help requests matching specialist's skills
@@ -125,18 +130,23 @@ export default function SpecialistMissionBoard() {
       .select('id')
       .eq('student_id', mission.student_id)
       .eq('tutor_id', profile.id)
-      .single();
+      .maybeSingle();
 
     // 2. Create if not exists
     if (!room) {
-      const { data: newRoom, error } = await supabase
+      const { data: newRoom, error: createError } = await supabase
         .from('chat_rooms')
         .insert({
           student_id: mission.student_id,
           tutor_id: profile.id
         })
         .select()
-        .single();
+        .maybeSingle();
+      
+      if (createError || !newRoom) {
+        alert("CRITICAL: Strategic Tunnel Creation Failed.");
+        return;
+      }
       room = newRoom;
     }
 
