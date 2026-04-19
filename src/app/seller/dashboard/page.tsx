@@ -1,14 +1,26 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Banknote, Package, TrendingUp, Users, MoreHorizontal, ChevronRight, BarChart3, PlusCircle } from 'lucide-react';
+import { Banknote, Package, TrendingUp, Users, MoreHorizontal, ChevronRight, BarChart3, PlusCircle, Calendar } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SellerDashboard() {
   const [session, setSession] = useState<any>(null);
+  const [scheduleCount, setScheduleCount] = useState(0);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      if (session?.user) {
+        const { count } = await supabase
+          .from('scheduled_classes')
+          .select('*', { count: 'exact', head: true })
+          .eq('tutor_id', session.user.id);
+        setScheduleCount(count || 0);
+      }
+    };
+    init();
   }, []);
 
   // Mock data for the draft
@@ -18,7 +30,6 @@ export default function SellerDashboard() {
 
   return (
     <div className="min-h-screen bg-brand-light font-sans text-brand-dark">
-      {/* Revenue & Stats Header */}
       <div className="bg-brand-dark text-white pt-20 pb-32 px-6 shadow-2xl rounded-b-[3rem] relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-brand-primary opacity-10 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2" />
         <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12 relative z-10">
@@ -31,9 +42,9 @@ export default function SellerDashboard() {
                  <span className="block text-[10px] font-black uppercase text-brand-secondary tracking-widest leading-none">Net Income</span>
               </div>
               <div className="p-6 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-xl">
-                 <Package className="w-6 h-6 text-brand-primary mb-4" />
-                 <span className="block text-3xl font-black mb-1">12</span>
-                 <span className="block text-[10px] font-black uppercase text-brand-secondary tracking-widest leading-none">Active Gigs</span>
+                 <Calendar className="w-6 h-6 text-brand-primary mb-4" />
+                 <span className="block text-3xl font-black mb-1">{scheduleCount}</span>
+                 <span className="block text-[10px] font-black uppercase text-brand-secondary tracking-widest leading-none">Active Sessions</span>
               </div>
               <div className="p-6 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-xl hidden lg:block">
                  <TrendingUp className="w-6 h-6 text-brand-secondary mb-4" />
@@ -54,7 +65,6 @@ export default function SellerDashboard() {
       </div>
 
       <main className="max-w-6xl mx-auto px-6 -mt-16 pb-24 space-y-12">
-        {/* Order Queue */}
         <section className="space-y-8">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-black flex items-center gap-2">
@@ -87,10 +97,6 @@ export default function SellerDashboard() {
                     <span className="text-2xl font-black italic text-brand-primary">${order.price - order.commission}</span>
                     <span className="block text-[10px] text-red-500 font-bold opacity-50">Tax: ${order.commission}</span>
                   </div>
-                  <div className="text-right">
-                    <span className="block text-[10px] font-black text-brand-secondary uppercase tracking-widest leading-none mb-1">Deadline</span>
-                    <span className="text-xl font-bold text-brand-dark">{order.deadline}</span>
-                  </div>
                 </div>
 
                 <div className="flex gap-4">
@@ -102,14 +108,13 @@ export default function SellerDashboard() {
           ))}
         </section>
 
-        {/* Gig Manager Snapshot */}
         <section className="bg-white/50 border border-brand-secondary/10 p-10 rounded-[3rem]">
           <h2 className="text-2xl font-black mb-10 flex items-center gap-2"><BarChart3 className="text-brand-primary" /> Gig Performance</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
               { label: "Total Views", value: "1,240", change: "+12%" },
               { label: "Conversion", value: "4.2%", change: "+0.3%" },
-              { label: "Active Orders", value: "3", change: "Stable" },
+              { label: "Active Sessions", value: scheduleCount, change: "Live" },
               { label: "Canceled", value: "0", change: "None" }
             ].map((stat, i) => (
               <div key={i} className="text-center p-6 bg-white rounded-3xl shadow-sm border border-brand-secondary/5">

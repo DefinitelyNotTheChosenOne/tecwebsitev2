@@ -107,7 +107,7 @@ export default function SessionPage() {
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<Tab>('discussion');
+  const [activeTab, setActiveTab] = useState<Tab>('class');
   const [sidebarFilter, setSidebarFilter] = useState<'active' | 'past'>('active');
   const [now, setNow] = useState(new Date());
 
@@ -328,7 +328,7 @@ export default function SessionPage() {
           if (studentMsgs.some(existing => existing.id === m.id)) return prev;
           const msg: Message = {
             id: m.id,
-            sender: m.sender_id === currentUser?.id ? 'tutor' : 'student',
+            sender: (m.sender_id === currentUser?.id || m.sender_id === currentUser?.id) ? 'tutor' : 'student',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
@@ -362,17 +362,32 @@ export default function SessionPage() {
     }, 2000);
   };
 
-  useEffect(() => { 
-    if (activeTab === 'discussion') {
-      setTimeout(() => discBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-    }
-  }, [allDiscMsgs, activeTab, selectedStudent]);
+  // ─── Auto-scroll Logic ──────────────────────────────────────────
+  useEffect(() => {
+    const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+      if (activeTab === 'discussion') {
+        discBottomRef.current?.scrollIntoView({ behavior });
+      } else if (activeTab === 'class') {
+        classBottomRef.current?.scrollIntoView({ behavior });
+      }
+    };
 
-  useEffect(() => { 
-    if (activeTab === 'class') {
-      setTimeout(() => classBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    // Immediate jump on tab/student change
+    const t1 = setTimeout(() => scrollToBottom('auto'), 100);
+    // Backup scroll after animation
+    const t2 = setTimeout(() => scrollToBottom('auto'), 400);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [activeTab, selectedStudent]);
+
+  useEffect(() => {
+    // Smooth scroll for new messages
+    if (activeTab === 'discussion') {
+      discBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else if (activeTab === 'class') {
+      classBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [allClassMsgs, activeTab, selectedStudent]);
+  }, [allDiscMsgs, allClassMsgs]);
 
   const getActiveSlot = () => {
     if (!selectedStudent) return null;
@@ -385,7 +400,12 @@ export default function SessionPage() {
   };
 
   const isClassLocked = () => {
-    return !getActiveSlot();
+    if (!selectedStudent) return true;
+    const active = getActiveSlot();
+    if (active) return false;
+    
+    // It's locked if it's in the future and NOT ended
+    return !isClassEnded(selectedStudent);
   };
 
   const getCountdown = () => {
@@ -400,8 +420,9 @@ export default function SessionPage() {
   };
 
   const isClassEnded = (student: any) => {
+    if (!student) return false;
     const studentSchedules = student.schedules || [];
-    if (studentSchedules.length === 0) return false;
+    if (studentSchedules.length === 0) return true; // Treat as ended if no schedules yet to allow history view
     const last = studentSchedules[studentSchedules.length - 1];
     return now > toDate(last.class_date, last.end_time);
   };
@@ -502,8 +523,8 @@ export default function SessionPage() {
            <h2 className="text-xl font-black text-brand-dark uppercase italic tracking-tighter mb-8 flex items-center justify-between">
               Students
               <div className="flex bg-white border border-slate-100 p-1 rounded-xl shadow-sm">
-                <button onClick={() => setSidebarFilter('active')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${sidebarFilter === 'active' ? 'bg-brand-primary text-brand-dark shadow-md' : 'text-slate-400 hover:text-brand-dark'}`}>Active</button>
-                <button onClick={() => setSidebarFilter('past')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${sidebarFilter === 'past' ? 'bg-brand-primary text-brand-dark shadow-md' : 'text-slate-400 hover:text-brand-dark'}`}>Past</button>
+                <button onClick={() => { setSidebarFilter('active'); }} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${sidebarFilter === 'active' ? 'bg-brand-primary text-brand-dark shadow-md' : 'text-slate-400 hover:text-brand-dark'}`}>Active</button>
+                <button onClick={() => { setSidebarFilter('past'); setActiveTab('class'); setSelectedStudent(null); }} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${sidebarFilter === 'past' ? 'bg-brand-primary text-brand-dark shadow-md' : 'text-slate-400 hover:text-brand-dark'}`}>Past</button>
               </div>
            </h2>
            <div className="relative group">
@@ -523,7 +544,7 @@ export default function SessionPage() {
                return (finished || !s.isAccepted) && matchesSearch;
             }
           }).map(s => (
-            <button key={s.id} onClick={() => { setSelectedStudent(s); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
+            <button key={s.id} onClick={() => { setSelectedStudent(s); setActiveTab('class'); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
               <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-black ${selectedStudent?.id === s.id ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>{s.initial}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start mb-0.5">
@@ -541,33 +562,38 @@ export default function SessionPage() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-50/20 w-full">
-        <header className="bg-white border-b border-slate-100 px-4 md:px-8 py-3 md:py-3.5 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3 md:gap-6">
-            <button onClick={() => setSidebarOpen(true)} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all md:hidden">
-              <Search className="w-4 h-4 text-slate-500" />
-            </button>
-            <Link href="/dashboard" className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-brand-dark transition-colors"><ChevronLeft className="w-3.5 h-3.5" />Back</Link>
-            <div className="hidden md:block h-6 w-px bg-slate-100" />
-            <div className="flex flex-col items-start leading-none">
-              <p className="text-[11px] font-black text-brand-dark uppercase italic">{selectedStudent?.name || 'No Student'}</p>
-              <p className="text-[9px] font-bold text-brand-primary uppercase tracking-widest mt-1">{selectedStudent?.subject || 'N/A'}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100"><Users className="w-3 h-3 text-slate-400" /><span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{slots.length}/{MAX_CLASSES} Slots</span></div>
-        </header>
-
-        <div className="bg-white border-b border-slate-100 px-8 flex shrink-0">
-          {(['discussion', 'schedule', 'class'] as const).map(k => (
-            <button key={k} onClick={() => setActiveTab(k)} className={`relative flex items-center gap-3 px-8 py-5 transition-all ${activeTab === k ? 'text-brand-dark' : 'text-slate-400'}`}>
-              <div className="text-left font-black uppercase leading-none">
-                <p className="text-[10px] tracking-[2px]">{k}</p>
-                <p className="text-[8px] tracking-widest opacity-60 mt-1">{k === 'class' && isClassLocked() ? 'Locked' : 'Access'}</p>
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-50/20 md:ml-80">
+        {selectedStudent && (
+          <>
+            <header className="bg-white border-b border-slate-100 px-4 md:px-8 py-3 md:py-3.5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3 md:gap-6">
+                <button onClick={() => setSidebarOpen(true)} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all md:hidden">
+                  <Search className="w-4 h-4 text-slate-500" />
+                </button>
+                <Link href="/dashboard" className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-brand-dark transition-colors"><ChevronLeft className="w-3.5 h-3.5" />Back</Link>
+                <div className="hidden md:block h-6 w-px bg-slate-100" />
+                <div className="flex flex-col items-start leading-none">
+                  <p className="text-[11px] font-black text-brand-dark uppercase italic">{selectedStudent.name}</p>
+                  <p className="text-[9px] font-bold text-brand-primary uppercase tracking-widest mt-1">{selectedStudent.subject}</p>
+                </div>
               </div>
-              {activeTab === k && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-primary" />}
-            </button>
-          ))}
-        </div>
+            </header>
+
+            {selectedStudent && !isClassEnded(selectedStudent) && (
+              <div className="bg-white border-b border-slate-100 flex shrink-0 justify-center md:justify-start md:px-12">
+                {(['discussion', 'schedule', 'class'] as const).map(k => (
+                  <button key={k} onClick={() => setActiveTab(k)} className={`relative flex items-center gap-3 px-8 md:px-10 py-5 transition-all ${activeTab === k ? 'text-brand-dark' : 'text-slate-400'}`}>
+                    <div className="text-left font-black uppercase leading-none">
+                      <p className="text-[10px] tracking-[2px]">{k}</p>
+                      <p className="text-[8px] tracking-widest opacity-60 mt-1">Access</p>
+                    </div>
+                    {activeTab === k && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
 
         <div className="flex-1 overflow-hidden relative">
           <AnimatePresence mode="wait">
@@ -587,18 +613,18 @@ export default function SessionPage() {
                   <p className="text-[10px] font-bold uppercase tracking-[3px] text-slate-400 mt-2">Active telemetry requires student selection from the sidebar.</p>
                 </div>
               </motion.div>
-            ) : activeTab === 'discussion' ? (
-              <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col max-w-4xl mx-auto px-8 pt-8 pb-4">
-                <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
-                  {discMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
-                  <div ref={discBottomRef} />
+) : isClassEnded(selectedStudent) ? (
+              /* ── ARCHIVE VIEW: Read-only chat history for past sessions ── */
+              <motion.div key="class-archive" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col">
+                <div className="flex-1 overflow-y-auto space-y-6 px-8 md:px-12 pt-8 pb-4 custom-scroll">
+                  {classMsgs.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center opacity-30 space-y-4">
+                      <BookOpen className="w-12 h-12 text-slate-400" />
+                      <p className="text-xs font-black uppercase tracking-widest text-slate-400">No class history recorded</p>
+                    </div>
+                  ) : classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
+                  <div ref={classBottomRef} />
                 </div>
-                <ChatInput 
-                  value={discInput} 
-                  onChange={(val: string) => { setDiscInput(val); handleTyping(); }} 
-                  onSend={sendDiscMsg} 
-                  placeholder="Negotiate timing..." 
-                />
               </motion.div>
             ) : activeTab === 'schedule' ? (
               <motion.div key="schedule" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-10 py-10 space-y-10 custom-scroll text-left">
@@ -621,17 +647,30 @@ export default function SessionPage() {
                   ))}
                 </div>
               </motion.div>
+            ) : activeTab === 'discussion' ? (
+               <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col w-full px-8 md:px-12 pt-8 pb-4">
+                <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
+                  {discMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
+                  <div ref={discBottomRef} />
+                </div>
+                <ChatInput 
+                  value={discInput} 
+                  onChange={(val: string) => { setDiscInput(val); handleTyping(); }} 
+                  onSend={sendDiscMsg} 
+                  placeholder="Negotiate timing..." 
+                />
+              </motion.div>
             ) : (
               <motion.div key="class" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col p-8">
                 {isClassLocked() ? (
                   <div className="flex-1 flex items-center justify-center text-center">
                     <div className="max-w-md">
                       <div className="w-20 h-20 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6"><Lock className="w-8 h-8 text-amber-500" /></div>
-                      <h3 className="text-2xl font-black uppercase italic text-brand-dark mb-2">{isClassEnded(selectedStudent) ? 'Session Terminated' : 'Terminal Locked'}</h3>
+                      <h3 className="text-2xl font-black uppercase italic text-brand-dark mb-2">Terminal Locked</h3>
                     </div>
                   </div>
                 ) : (
-                  <div className="h-full flex flex-col max-w-4xl mx-auto w-full">
+                  <div className="h-full flex flex-col w-full px-8 md:px-12">
                     <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                       {classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
                       <div ref={classBottomRef} />

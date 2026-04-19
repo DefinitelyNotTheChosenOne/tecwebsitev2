@@ -248,15 +248,15 @@ export default function StudentSessionsPage() {
     };
     fetchMsgs();
 
-    const channel = supabase.channel(`student-room-${selectedSession.roomId}`);
+    const channel = supabase.channel(`room-${selectedSession.roomId}`);
     channelRef.current = channel;
 
     channel
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
         const m = payload.new as any;
         if (m.room_id !== selectedSession.roomId) return;
-        // Block system handshake signals from appearing as chat messages
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:')) return;
+        
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
           const msg: Message = {
@@ -271,6 +271,7 @@ export default function StudentSessionsPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload) => {
         const m = payload.new as any;
         if (m.room_id !== selectedSession.roomId) return;
+        
         setClassMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
           const msg: Message = {
@@ -309,17 +310,32 @@ export default function StudentSessionsPage() {
     }, 2000);
   };
 
-  useEffect(() => { 
-    if (activeTab === 'discussion') {
-        setTimeout(() => msgBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50); 
-    }
-  }, [messages, activeTab, selectedSession]);
-
-  useEffect(() => { 
-      if (activeTab === 'class') {
-          setTimeout(() => classBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50); 
+  // ─── Auto-scroll Logic ──────────────────────────────────────────
+  useEffect(() => {
+    const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+      if (activeTab === 'discussion') {
+        msgBottomRef.current?.scrollIntoView({ behavior });
+      } else if (activeTab === 'class') {
+        classBottomRef.current?.scrollIntoView({ behavior });
       }
-  }, [classMessages, activeTab, selectedSession]);
+    };
+
+    // Immediate jump on tab/session change
+    const t1 = setTimeout(() => scrollToBottom('auto'), 100);
+    // Backup scroll after animation
+    const t2 = setTimeout(() => scrollToBottom('auto'), 400);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [activeTab, selectedSession]);
+
+  useEffect(() => {
+    // Smooth scroll for new messages
+    if (activeTab === 'discussion') {
+      msgBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else if (activeTab === 'class') {
+      classBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, classMessages]);
 
   // ─── Class lock logic ─────────────────────────────────────────────
   const getActiveClass = (): ScheduledClass | null => {
@@ -371,14 +387,32 @@ export default function StudentSessionsPage() {
     const content = msgInput.trim(); 
     setMsgInput('');
 
-    const { error } = await supabase.from('chat_messages').insert({ 
+    // Optimistic update — show immediately without waiting for realtime echo
+    const optimisticMsg: Message = {
+      id: `opt-${Date.now()}`,
+      sender: 'student',
+      text: content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+
+    const { data, error } = await supabase.from('chat_messages').insert({ 
       room_id: selectedSession.roomId, 
       sender_id: currentUser.id, 
       content 
-    });
+    }).select().single();
 
     if (error) {
       console.error("Transmission Error:", error.message);
+      // Rollback optimistic update on failure
+      setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+    } else if (data) {
+      // Replace optimistic msg with confirmed DB record
+      setMessages(prev => prev.map(m =>
+        m.id === optimisticMsg.id
+          ? { ...m, id: data.id }
+          : m
+      ));
     }
   };
 
@@ -387,14 +421,30 @@ export default function StudentSessionsPage() {
     const content = classInput.trim(); 
     setClassInput('');
 
-    const { error } = await supabase.from('live_class_messages').insert({
+    // Optimistic update
+    const optimisticMsg: Message = {
+      id: `opt-${Date.now()}`,
+      sender: 'student',
+      text: content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setClassMessages(prev => [...prev, optimisticMsg]);
+
+    const { data, error } = await supabase.from('live_class_messages').insert({
       room_id: selectedSession.roomId,
       sender_id: currentUser.id,
       content
-    });
+    }).select().single();
 
     if (error) {
       console.error("Signal Failed:", error.message);
+      setClassMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+    } else if (data) {
+      setClassMessages(prev => prev.map(m =>
+        m.id === optimisticMsg.id
+          ? { ...m, id: data.id }
+          : m
+      ));
     }
   };
 
