@@ -592,18 +592,11 @@ export default function SessionPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start mb-0.5">
                   <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p>
-                  {isClassEnded(s) ? (
+                  {isClassEnded(s) && (
                     <span className="text-[7px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded uppercase">FIN</span>
-                  ) : null}
+                  )}
                 </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary leading-none">{s.subject}</p>
-                </div>
-                {/* DEBUG BLOCK */}
-                <div className="text-[7px] text-slate-400 mt-1">
-                  End: {s.schedules?.length ? toDate(s.schedules[s.schedules.length - 1].class_date, s.schedules[s.schedules.length - 1].end_time).getTime() : 'None'} <br/>
-                  Sig: {s.latestSignalTime || 'None'}
-                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary leading-none">{s.subject}</p>
               </div>
             </button>
           ))}
