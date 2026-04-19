@@ -89,6 +89,10 @@ export default function UserDashboard() {
             }
           }
 
+          // ⚡ WIRE UP NOTIFICATION FEED
+          fetchNotifications(user.id);
+          subscribeToSignals(user.id);
+
           if (data?.role === 'user') {
              supabase.from('help_requests')
                .select('*')
