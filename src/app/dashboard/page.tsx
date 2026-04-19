@@ -69,21 +69,24 @@ export default function UserDashboard() {
         if (user) {
           const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
           setProfile(data);
-          setIsTutor(data?.role === 'seller');
-          fetchNotifications(user.id);
-          subscribeToSignals(user.id);
-          
-          if (data?.role === 'admin') router.push('/admin/dashboard');
-          
-          if (data?.role === 'seller' && data?.skills?.length > 0) {
-            supabase.from('help_requests')
-              .select('*, student:profiles(full_name)')
-              .eq('status', 'open')
-              .in('subject', data.skills)
-              .limit(3)
-              .then(({ data: matches }) => {
-                setRecommendations(matches || []);
-              });
+          // 🛡️ ADMIN HIGH COMMAND REDIRECT
+          if (data?.role === 'admin') {
+            router.replace('/admin/dashboard');
+            return;
+          }
+
+          if (data?.role === 'seller') {
+            setIsTutor(true);
+            if (data?.skills?.length > 0) {
+              supabase.from('help_requests')
+                .select('*, student:profiles(full_name)')
+                .eq('status', 'open')
+                .in('subject', data.skills)
+                .limit(3)
+                .then(({ data: matches }) => {
+                  setRecommendations(matches || []);
+                });
+            }
           }
 
           if (data?.role === 'user') {
