@@ -231,8 +231,8 @@ export default function UserDashboard() {
           <div className="lg:col-span-7 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[
-                { label: isTutor ? 'Available Bids' : 'Post Mission', sub: isTutor ? 'Hunt Markets' : 'Recruit Experts', icon: BookOpen, color: 'indigo', href: isTutor ? '/help-wanted' : '/help-wanted/new' },
-                { label: isTutor ? 'Active Offers' : 'Bids Recieved', sub: 'Inbound Signals', icon: Send, color: 'pink', href: isTutor ? '/bids' : '/dashboard' },
+                { label: isTutor ? 'Market Hunt' : 'Post Mission', sub: isTutor ? 'Available Missions' : 'Recruit Experts', icon: BookOpen, color: 'indigo', href: isTutor ? '/help-wanted' : '/help-wanted/new' },
+                { label: isTutor ? 'My Bids' : 'Bids Received', sub: isTutor ? 'Active Proposals' : 'Inbound Signals', icon: Send, color: 'pink', href: isTutor ? '/bids' : '/dashboard' },
                 { label: 'Chat Terminal', sub: 'Secure Comms', icon: MessageSquare, color: 'emerald', href: isTutor ? '/dashboard/session' : '/sessions' }
               ].map((tile, i) => (
                 <Link key={i} href={tile.href}>
