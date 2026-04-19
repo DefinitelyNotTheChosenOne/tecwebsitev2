@@ -26,49 +26,54 @@ export default function UserDashboard() {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        setProfile(data);
-        setIsTutor(data?.role === 'seller');
-        fetchNotifications(user.id);
-        subscribeToSignals(user.id);
-        
-        if (data?.role === 'admin') router.push('/admin/dashboard');
-        
-        if (data?.role === 'seller' && data?.skills?.length > 0) {
-          supabase.from('help_requests')
-            .select('*, student:profiles(full_name)')
-            .eq('status', 'open')
-            .in('subject', data.skills)
-            .limit(3)
-            .then(({ data: matches }) => {
-              setRecommendations(matches || []);
-            });
-        }
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+          setProfile(data);
+          setIsTutor(data?.role === 'seller');
+          fetchNotifications(user.id);
+          subscribeToSignals(user.id);
+          
+          if (data?.role === 'admin') router.push('/admin/dashboard');
+          
+          if (data?.role === 'seller' && data?.skills?.length > 0) {
+            supabase.from('help_requests')
+              .select('*, student:profiles(full_name)')
+              .eq('status', 'open')
+              .in('subject', data.skills)
+              .limit(3)
+              .then(({ data: matches }) => {
+                setRecommendations(matches || []);
+              });
+          }
 
-        if (data?.role === 'user') {
-           supabase.from('help_requests')
-             .select('*')
-             .eq('student_id', user.id)
-             .then(({ data: reqs }) => {
-                setMyRequests(reqs || []);
-             });
+          if (data?.role === 'user') {
+             supabase.from('help_requests')
+               .select('*')
+               .eq('student_id', user.id)
+               .then(({ data: reqs }) => {
+                  setMyRequests(reqs || []);
+               });
+          }
+          
+          supabase.from('tutoring_sessions')
+            .select('*')
+            .or(`tutor_id.eq.${user.id},student_id.eq.${user.id}`)
+            .eq('status', 'completed')
+            .then(({ data }) => {
+              setCompletedSessions(data || []);
+              const total = data?.reduce((acc: number, curr: any) => acc + (Number(curr.agreed_price) || 0), 0);
+              setTotalEarnings(total || 0);
+            });
+        } else {
+          router.push('/auth');
         }
-        
-        supabase.from('tutoring_sessions')
-          .select('*')
-          .or(`tutor_id.eq.${user.id},student_id.eq.${user.id}`)
-          .eq('status', 'completed')
-          .then(({ data }) => {
-            setCompletedSessions(data || []);
-            const total = data?.reduce((acc: number, curr: any) => acc + (Number(curr.agreed_price) || 0), 0);
-            setTotalEarnings(total || 0);
-          });
-      } else {
-        router.push('/auth');
+      } catch (err) {
+        console.error("Dashboard Intelligence Failure:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchProfile();
   }, [router]);

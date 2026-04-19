@@ -36,7 +36,7 @@ function AuthContent() {
       const destination = redirect 
         ? `${redirect}${redirect.includes('?') ? '&' : '?'}redirected=true` 
         : '/dashboard';
-      router.push(destination);
+      window.location.href = destination;
     }
     setIsLoading(false);
   };

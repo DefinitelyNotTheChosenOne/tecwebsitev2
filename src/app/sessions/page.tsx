@@ -5,7 +5,7 @@ import {
   ChevronLeft, Send, CalendarDays, Clock,
   CheckCircle2, Zap, BookOpen, Lock, Users,
   MessageCircle, Search, Bell, ArrowRight,
-  Timer, Wifi, Shield, X, History
+  Timer, Wifi, Shield, X, History, RefreshCcw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -61,8 +61,18 @@ const toDateTime = (dateStr: string, timeStr: string) => new Date(`${dateStr}T${
 type Tab = 'updates' | 'discussion' | 'class' | 'history';
 
 // ─── Shared Components ──────────────────────────────────────────────
-const ChatBubble = ({ msg, tutorInitial }: { msg: Message; tutorInitial: string }) => (
-  <div className={`flex gap-3 ${msg.sender === 'student' ? 'flex-row-reverse' : 'flex-row'}`}>
+const ChatBubble = ({ msg, tutorInitial, isReportingMode, isSelected, toggleSelect }: any) => (
+  <div 
+    onClick={() => isReportingMode && toggleSelect?.(msg.id)}
+    className={`flex items-start gap-3 w-full ${msg.sender === 'student' ? 'flex-row-reverse' : 'flex-row'} ${isReportingMode ? 'cursor-pointer p-2 rounded-xl transition-all hover:bg-slate-50' : ''} ${isSelected ? 'bg-red-50 ring-1 ring-red-200' : ''}`}
+  >
+    {isReportingMode && (
+      <div className="flex items-center justify-center shrink-0 mt-2">
+        <div className={`w-5 h-5 rounded border border-slate-300 ${isSelected ? 'bg-red-500 border-red-500' : 'bg-white'} flex items-center justify-center`}>
+          {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+        </div>
+      </div>
+    )}
     <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ${msg.sender === 'student' ? 'bg-blue-500 text-white' : 'bg-brand-primary text-brand-dark'}`}>
       {msg.sender === 'student' ? 'Y' : tutorInitial}
     </div>
@@ -116,6 +126,13 @@ export default function StudentSessionsPage() {
   const channelRef = useRef<any>(null);
   const [isTutorTyping, setIsTutorTyping] = useState(false);
   const typingTimeoutRef = useRef<any>(null);
+
+  // ─── Report States ────────────────────────────────────────────────
+  const [isReportingMode, setIsReportingMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // ─── Init ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -379,6 +396,35 @@ export default function StudentSessionsPage() {
       console.error("Signal Failed:", error.message);
       setClassMessages(prev => prev.filter(m => m.id !== optMsg.id));
     }
+  };
+
+  // ─── Report Submission ────────────────────────────────────────────
+  const submitReport = async () => {
+    if (!reportReason || selectedMessages.length === 0 || !currentUser || !selectedSession) return;
+    setIsSubmittingReport(true);
+    
+    const evidence = messages
+      .filter(m => selectedMessages.includes(m.id))
+      .map(m => `[${m.sender.toUpperCase()}] ${m.text}`)
+      .join('\n');
+
+    const { error } = await supabase.from('flagged_content').insert({
+      sender_id: selectedSession.id, 
+      content: evidence,
+      reason: reportReason,
+      status: 'pending'
+    });
+
+    if (error) {
+      alert("Failed to submit report. Please try again.");
+    } else {
+      setShowReportModal(false);
+      setIsReportingMode(false);
+      setSelectedMessages([]);
+      setReportReason('');
+      alert("Report submitted successfully. We will review this shortly.");
+    }
+    setIsSubmittingReport(false);
   };
 
   // ─── Loading ──────────────────────────────────────────────────────
@@ -651,16 +697,39 @@ export default function StudentSessionsPage() {
 
             {/* ── DISCUSSION TAB ───────────────────────────────────── */}
             {activeTab === 'discussion' && (
-              <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col max-w-4xl mx-auto px-8 pt-8 pb-4">
-                <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
+              <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col max-w-4xl mx-auto px-8 pt-6 pb-4">
+                
+                <div className="flex items-center justify-end mb-4 shrink-0">
+                   {!isReportingMode ? (
+                     <button onClick={() => setIsReportingMode(true)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
+                       <Shield className="w-3.5 h-3.5" /> Report Issue
+                     </button>
+                   ) : (
+                     <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center w-full justify-between shadow-sm">
+                       <span>Please select chat you want to report</span>
+                       <button onClick={() => { setIsReportingMode(false); setSelectedMessages([]); }} className="text-slate-400 hover:text-red-600 transition-colors">Cancel</button>
+                     </div>
+                   )}
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll relative">
                   {messages.length === 0 && (
-                    <div className="py-20 text-center">
-                      <MessageCircle className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                      <p className="text-slate-300 font-black uppercase tracking-[3px] italic text-sm">Start the conversation...</p>
-                    </div>
+                     <div className="py-20 text-center">
+                       <MessageCircle className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                       <p className="text-slate-300 font-black uppercase tracking-[3px] italic text-sm">Start the conversation...</p>
+                     </div>
                   )}
-                  {messages.map(m => <ChatBubble key={m.id} msg={m} tutorInitial={selectedSession?.tutorInitial || 'T'} />)}
-                  {isTutorTyping && (
+                  {messages.map(m => (
+                    <ChatBubble 
+                      key={m.id} 
+                      msg={m} 
+                      tutorInitial={selectedSession?.tutorInitial || 'T'} 
+                      isReportingMode={isReportingMode}
+                      isSelected={selectedMessages.includes(m.id)}
+                      toggleSelect={(id: string) => setSelectedMessages(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                    />
+                  ))}
+                  {isTutorTyping && !isReportingMode && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2 items-center text-[10px] font-black uppercase tracking-widest text-slate-300 italic ml-11">
                       <div className="flex gap-1">
                         <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -672,12 +741,27 @@ export default function StudentSessionsPage() {
                   )}
                   <div ref={msgBottomRef} />
                 </div>
-                <ChatInput 
-                  value={msgInput} 
-                  onChange={(val: string) => { setMsgInput(val); handleTyping(); }} 
-                  onSend={sendMsg} 
-                  placeholder="Message your tutor..." 
-                />
+                
+                {isReportingMode ? (
+                  <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
+                    <button 
+                      disabled={selectedMessages.length === 0}
+                      onClick={() => setShowReportModal(true)}
+                      className="px-6 py-4 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[2px] disabled:opacity-50 hover:bg-red-600 transition-all flex items-center gap-2 shadow-lg"
+                    >
+                      <Shield className="w-4 h-4" /> Review Report
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-4">
+                    <ChatInput 
+                      value={msgInput} 
+                      onChange={(val: string) => { setMsgInput(val); handleTyping(); }} 
+                      onSend={sendMsg} 
+                      placeholder="Message your tutor..." 
+                    />
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -738,6 +822,82 @@ export default function StudentSessionsPage() {
             )}
           </AnimatePresence>
         </div>
+        
+        {/* ── Report Modal ────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {showReportModal && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] bg-brand-dark/90 backdrop-blur-sm flex items-center justify-center p-6"
+            >
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
+              >
+                <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+                   <div className="flex items-center gap-3">
+                     <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center">
+                       <Shield className="w-6 h-6 text-red-500" />
+                     </div>
+                     <div>
+                       <h3 className="text-xl font-black italic text-brand-dark uppercase">Report Violation</h3>
+                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">High Command Review</p>
+                     </div>
+                   </div>
+                   <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-slate-200 rounded-full transition-all">
+                     <X className="w-5 h-5 text-slate-500" />
+                   </button>
+                </div>
+
+                <div className="p-8 flex-1 overflow-y-auto custom-scroll">
+                   <p className="text-[10px] font-black uppercase tracking-[2px] text-slate-400 mb-4">Reason for reporting</p>
+                   <select 
+                     value={reportReason}
+                     onChange={(e) => setReportReason(e.target.value)}
+                     className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl text-sm font-bold text-brand-dark outline-none focus:border-red-400 focus:ring-4 focus:ring-red-100 transition-all mb-8 appearance-none cursor-pointer"
+                   >
+                     <option value="" disabled>Select a reason...</option>
+                     <option value="Sexually Explicit / Nudity">Sexually Explicit / Nudity</option>
+                     <option value="Harassment or Hate Speech">Harassment or Hate Speech</option>
+                     <option value="Spam or Scam">Spam or Scam</option>
+                     <option value="Off-platform Transaction">Off-platform Transaction</option>
+                     <option value="Other">Other</option>
+                   </select>
+
+                   <p className="text-[10px] font-black uppercase tracking-[2px] text-slate-400 mb-4">Selected Evidence</p>
+                   <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                     {messages.filter(m => selectedMessages.includes(m.id)).map(m => (
+                       <div key={m.id} className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+                         <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">{m.sender === 'student' ? 'You' : selectedSession?.tutorName}</p>
+                         <p className="text-sm font-medium text-brand-dark">{m.text}</p>
+                       </div>
+                     ))}
+                   </div>
+                </div>
+
+                <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3 shrink-0">
+                  <button 
+                   onClick={() => setShowReportModal(false)}
+                   className="flex-1 py-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                   onClick={submitReport}
+                   disabled={!reportReason || isSubmittingReport}
+                   className="flex-1 flex justify-center items-center py-4 bg-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50 hover:bg-red-600 transition-all shadow-lg"
+                  >
+                    {isSubmittingReport ? <RefreshCcw className="w-4 h-4 animate-spin" /> : 'Submit to Admin'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );
