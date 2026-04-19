@@ -93,7 +93,8 @@ export default function UserDashboard() {
   };
 
   const subscribeToSignals = (uid: string) => {
-    const channel = supabase.channel(`signals-${uid}`);
+    const channelId = `signals-${uid}-${Date.now()}`;
+    const channel = supabase.channel(channelId);
     
     // Define signal listener first
     channel.on('postgres_changes', { 

@@ -108,7 +108,9 @@ export default function SpecialistMissionBoard() {
     fetchMissionsStable();
 
     // 4. Real-time Subscription for Incoming Handshaking
-    const channel = supabase.channel('missions-live');
+    // Use a unique channel ID to prevent race conditions during React double-mounts
+    const channelId = `missions-live-${Date.now()}`;
+    const channel = supabase.channel(channelId);
     
     // Explicitly define listeners BEFORE calling subscribe
     channel.on('postgres_changes', { 
