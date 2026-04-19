@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import { 
@@ -101,6 +101,8 @@ export default function SpecialistMissionBoard() {
     setLoading(false);
   };
 
+  const channelRef = useRef<any>(null);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchMissionsStable = useCallback(fetchMissions, []);
 
@@ -108,29 +110,24 @@ export default function SpecialistMissionBoard() {
     fetchMissionsStable();
 
     // 4. Real-time Subscription for Incoming Handshaking
-    // Use a unique channel ID to prevent race conditions during React double-mounts
-    const channelId = `missions-live-${Date.now()}`;
-    const channel = supabase.channel(channelId);
+    // Create channel
+    const chan = supabase.channel(`missions-live-${Math.random()}`);
     
-    // Explicitly define listeners BEFORE calling subscribe
-    channel.on('postgres_changes', { 
+    chan.on('postgres_changes', { 
       event: 'INSERT', 
       schema: 'public', 
       table: 'chat_rooms'
     }, () => {
-      // Trigger a fresh fetch when a new room is detected
       fetchMissions();
     });
 
-    // Start the subscription in a separate step
-    channel.subscribe((status) => {
-       if (status === 'SUBSCRIBED') {
-         console.log('Operational Handshake System: Online');
-       }
-    });
+    chan.subscribe();
+    channelRef.current = chan;
 
     return () => { 
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
     };
   }, [fetchMissionsStable]);
 

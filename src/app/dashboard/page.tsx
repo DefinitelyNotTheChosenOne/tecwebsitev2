@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -23,6 +23,7 @@ export default function UserDashboard() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     let channel: any;
@@ -78,7 +79,9 @@ export default function UserDashboard() {
     };
     fetchProfile();
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
     };
   }, [router]);
 
@@ -93,7 +96,7 @@ export default function UserDashboard() {
   };
 
   const subscribeToSignals = (uid: string) => {
-    const channelId = `signals-${uid}-${Date.now()}`;
+    const channelId = `signals-${uid}-${Math.random()}`;
     const channel = supabase.channel(channelId);
     
     // Define signal listener first
@@ -108,6 +111,7 @@ export default function UserDashboard() {
     
     // Subscribe in separate phase
     channel.subscribe();
+    channelRef.current = channel;
 
     return channel;
   };
