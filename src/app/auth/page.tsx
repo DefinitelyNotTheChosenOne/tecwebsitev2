@@ -32,20 +32,28 @@ function AuthContent() {
 
     if (error) {
       alert(error.message);
-    } else {
-      const { data: prof } = await supabase.from('profiles').select('role').eq('id', user?.id).single();
-      
-      if (prof) {
-        if (prof.role === 'admin') {
-          router.replace('/admin/dashboard');
-        } else {
-          let destination = '/dashboard';
-          if (redirect) {
-            destination = `${redirect}${redirect.includes('?') ? '&' : '?'}redirected=true`;
-          }
-          window.location.href = destination;
-        }
+    } else if (user) {
+      // 🌌 SELF-HEALING REGISTRY: Manually force profile creation if trigger fails
+      const { error: upsertErr } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          full_name: fullName || 'New Specialist',
+          display_name: fullName || 'New Specialist',
+          role: 'student' // Default role
+        }, { onConflict: 'id' });
+
+      if (upsertErr) {
+        console.error("Registry Sync Failure:", upsertErr);
+        alert("Criticial: Database handshaking failed. Profile may be incomplete.");
       }
+
+      // Redirect immediately
+      let destination = '/dashboard';
+      if (redirect) {
+        destination = `${redirect}${redirect.includes('?') ? '&' : '?'}redirected=true`;
+      }
+      window.location.href = destination;
     }
     setIsLoading(false);
   };
