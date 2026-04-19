@@ -180,6 +180,15 @@ export default function SessionPage() {
 
     const interval = setInterval(() => setNow(new Date()), 1000);
 
+    // REAL-TIME PURGE SYNC: Detect deletions from other devices
+    const syncChannel = supabase.channel('global-purge-sync')
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_rooms' }, (payload) => {
+         const deletedId = payload.old.id;
+         setStudents(prev => prev.filter(s => s.roomId !== deletedId));
+         setSelectedStudent(curr => curr?.roomId === deletedId ? null : curr);
+      })
+      .subscribe();
+
     // Anti-Snoop Protocol
     const handleContext = (e: MouseEvent) => {
       if (process.env.NODE_ENV === 'production') e.preventDefault();
@@ -197,6 +206,7 @@ export default function SessionPage() {
 
     return () => {
       clearInterval(interval);
+      supabase.removeChannel(syncChannel);
       window.removeEventListener('contextmenu', handleContext);
       window.removeEventListener('keydown', handleKeydown);
     };
