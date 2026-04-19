@@ -33,8 +33,8 @@ type ClassSlot = {
   studentName: string;
   subject: string;
   date: string;
-  startTime: string;
-  endTime: string;
+  start_time: string;
+  end_time: string;
 };
 
 type StudentProfile = {
@@ -146,7 +146,27 @@ export default function SessionPage() {
     init();
 
     const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
+
+    // Anti-Snoop Protocol
+    const handleContext = (e: MouseEvent) => {
+      if (process.env.NODE_ENV === 'production') e.preventDefault();
+    };
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (process.env.NODE_ENV === 'production') {
+        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) || (e.ctrlKey && e.key === 'U')) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    window.addEventListener('contextmenu', handleContext);
+    window.addEventListener('keydown', handleKeydown);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('contextmenu', handleContext);
+      window.removeEventListener('keydown', handleKeydown);
+    };
   }, [router]);
 
   const fetchSessions = async (userId: string, targetRoomId?: string | null) => {
@@ -212,12 +232,7 @@ export default function SessionPage() {
         if (targetRoomId) {
           const target = studentList.find(s => s.roomId === targetRoomId);
           if (target) setSelectedStudent(target);
-          else setSelectedStudent(studentList[0]);
-        } else if (!selectedStudent) {
-          // If no target, select the first student who is either accepted OR (if searching/navigating) matching active
-          const firstEligible = studentList.find(s => s.isAccepted) || studentList[0];
-          setSelectedStudent(firstEligible);
-        } else {
+        } else if (selectedStudent) {
           const fresh = studentList.find(s => s.id === selectedStudent.id);
           if (fresh) setSelectedStudent(fresh);
         }
@@ -231,8 +246,8 @@ export default function SessionPage() {
           studentName: matchingStudent?.name || 'Unknown',
           subject: matchingStudent?.subject || 'Session',
           date: s.class_date,
-          startTime: s.start_time,
-          endTime: s.end_time
+          start_time: s.start_time,
+          end_time: s.end_time
         };
       });
       setSlots(mappedSlots);
@@ -406,10 +421,9 @@ export default function SessionPage() {
     setConflictError(null);
     if (formEnd <= formStart) { setConflictError('End time must be after start time.'); return; }
     const ns = toDate(formDate, formStart), ne = toDate(formDate, formEnd);
-    const conflicts = slots.filter(s => s.date === formDate && hasConflict(ns, ne, toDate(s.date, s.startTime), toDate(s.date, s.endTime)));
+    const conflicts = slots.filter(s => s.date === formDate && hasConflict(ns, ne, toDate(s.date, s.start_time), toDate(s.date, s.end_time)));
     if (conflicts.length > 0) { setConflictError(`Conflict: ${conflicts[0].studentName} is scheduled then.`); return; }
-
-    // Persist to database
+    
     const { error: schedErr } = await supabase.from('scheduled_classes').insert({
       room_id: selectedStudent.roomId,
       tutor_id: currentUser?.id,
@@ -418,24 +432,16 @@ export default function SessionPage() {
       start_time: formStart,
       end_time: formEnd,
     });
-
-    if (schedErr) { setConflictError('Failed to save schedule. Try again.'); console.error(schedErr); return; }
-
-    // Notify student via chat
-    await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser?.id, content: `📅 Class scheduled: ${fmtDate(formDate)} at ${fmtTime(formStart)} - ${fmtTime(formEnd)}` });
-
-    // Ensure the Live Class terminal unlocks by injecting the schedule into the active student state
-    const dbFormatSchedule = { class_date: formDate, start_time: formStart, end_time: formEnd };
     
-    // Update local student instance
+    if (schedErr) { setConflictError('Failed to save schedule. Try again.'); console.error(schedErr); return; }
+    await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser?.id, content: `📅 Class scheduled: ${fmtDate(formDate)} at ${fmtTime(formStart)} - ${fmtTime(formEnd)}` });
+    
+    const dbFormatSchedule = { class_date: formDate, start_time: formStart, end_time: formEnd };
     const updatedStudent = { ...selectedStudent, schedules: [...(selectedStudent as any).schedules || [], dbFormatSchedule] };
     setSelectedStudent(updatedStudent);
-    
-    // Update main students list
     setStudents(prev => prev.map(s => s.id === selectedStudent.id ? updatedStudent : s));
     
-    const newSlot: ClassSlot = { id: Date.now(), studentName: selectedStudent.name, subject: selectedStudent.subject, date: formDate, startTime: formStart, endTime: formEnd };
-    setSlots(p => [...p, newSlot]);
+    setSlots(p => [...p, { id: Date.now(), studentName: selectedStudent.name, subject: selectedStudent.subject, date: formDate, start_time: formStart, end_time: formEnd }]);
     setFormDate(''); setFormStart(''); setFormEnd('');
   };
 
@@ -565,20 +571,26 @@ export default function SessionPage() {
 
         <div className="flex-1 overflow-hidden relative">
           <AnimatePresence mode="wait">
-            {activeTab === 'discussion' && (
-              <motion.div key="d" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col max-w-4xl mx-auto px-8 pt-8 pb-4">
+            {!selectedStudent ? (
+              <motion.div 
+                key="placeholder"
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }}
+                className="h-full flex flex-col items-center justify-center space-y-4 opacity-30 px-10"
+              >
+                <div className="p-8 bg-slate-100 rounded-full">
+                  <User className="w-16 h-16 text-slate-400" />
+                </div>
+                <div className="text-center">
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-brand-dark">Select Mission Dossier</h3>
+                  <p className="text-[10px] font-bold uppercase tracking-[3px] text-slate-400 mt-2">Active telemetry requires student selection from the sidebar.</p>
+                </div>
+              </motion.div>
+            ) : activeTab === 'discussion' ? (
+              <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col max-w-4xl mx-auto px-8 pt-8 pb-4">
                 <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                   {discMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
-                  {isStudentTyping && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2 items-center text-[10px] font-black uppercase tracking-widest text-slate-300 italic ml-11">
-                      <div className="flex gap-1">
-                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </div>
-                      {selectedStudent?.name} is manifesting a response...
-                    </motion.div>
-                  )}
                   <div ref={discBottomRef} />
                 </div>
                 <ChatInput 
@@ -588,109 +600,39 @@ export default function SessionPage() {
                   placeholder="Negotiate timing..." 
                 />
               </motion.div>
-            )}
-
-            {activeTab === 'schedule' && (
-              <motion.div key="s" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-10 py-10 space-y-10 custom-scroll text-left">
+            ) : activeTab === 'schedule' ? (
+              <motion.div key="schedule" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-10 py-10 space-y-10 custom-scroll text-left">
                 <div className="bg-white rounded-[2rem] border border-slate-200 p-10 shadow-sm space-y-8">
-                  <h2 className="text-2xl font-black uppercase italic tracking-tighter text-brand-dark">Schedule {selectedStudent?.name || 'Session'}</h2>
+                  <h2 className="text-2xl font-black uppercase italic tracking-tighter text-brand-dark">Schedule {selectedStudent.name}</h2>
                   {conflictError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold">{conflictError}</div>}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2">
-                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">Date</p>
-                       <input 
-                         type="date" 
-                         value={formDate} 
-                         onChange={e => setFormDate(e.target.value)} 
-                         onClick={(e) => (e.currentTarget as any).showPicker()}
-                         className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary cursor-pointer hover:bg-slate-100/50 transition-all font-bold text-sm" 
-                       />
-                    </div>
-                    <div className="space-y-2">
-                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">Start Time</p>
-                       <input 
-                         type="time" 
-                         value={formStart} 
-                         onChange={e => setFormStart(e.target.value)} 
-                         onClick={(e) => (e.currentTarget as any).showPicker()}
-                         className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary cursor-pointer hover:bg-slate-100/50 transition-all font-bold text-sm" 
-                       />
-                    </div>
-                    <div className="space-y-2">
-                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">End Time</p>
-                       <input 
-                         type="time" 
-                         value={formEnd} 
-                         onChange={e => setFormEnd(e.target.value)} 
-                         onClick={(e) => (e.currentTarget as any).showPicker()}
-                         className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary cursor-pointer hover:bg-slate-100/50 transition-all font-bold text-sm" 
-                       />
-                    </div>
+                    <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary transition-all font-bold text-sm" />
+                    <input type="time" value={formStart} onChange={e => setFormStart(e.target.value)} className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary transition-all font-bold text-sm" />
+                    <input type="time" value={formEnd} onChange={e => setFormEnd(e.target.value)} className="w-full bg-slate-50 border border-slate-100 p-4 rounded-xl outline-none focus:border-brand-primary transition-all font-bold text-sm" />
                   </div>
-                  <button onClick={scheduleClass} className="w-full md:w-auto px-10 py-5 bg-brand-dark text-white rounded-2xl font-black uppercase tracking-[3px] hover:bg-brand-primary hover:text-brand-dark transition-all shadow-xl">Lock Schedule</button>
+                  <button onClick={scheduleClass} className="px-10 py-5 bg-brand-dark text-white rounded-2xl font-black uppercase tracking-[3px] hover:bg-brand-primary hover:text-brand-dark transition-all shadow-xl">Lock Schedule</button>
                 </div>
                 <div className="space-y-4">
-                  <p className="text-[10px] font-black uppercase tracking-[5px] text-slate-400">Scheduled Sessions</p>
-                  {slots.length === 0 ? (
-                    <div className="p-12 text-center text-[10px] font-black uppercase tracking-[3px] text-slate-300 italic bg-white rounded-2xl border border-dashed border-slate-200">No sessions manifest yet...</div>
-                  ) : (
-                    slots.map(s => (
-                      <div key={s.id} className="bg-white border border-slate-100 rounded-2xl p-6 flex justify-between items-center shadow-sm">
-                        <div><p className="font-black italic text-brand-dark uppercase">{s.studentName}</p><p className="text-[10px] font-bold text-brand-primary uppercase tracking-widest">{s.subject}</p></div>
-                        <div className="text-right text-xs font-bold"><p className="text-brand-dark">{fmtDate(s.date)}</p><p className="text-slate-400">{fmtTime(s.startTime)} - {fmtTime(s.endTime)}</p></div>
-                      </div>
-                    ))
-                  )}
+                  {slots.map(s => (
+                    <div key={s.id} className="bg-white border border-slate-100 rounded-2xl p-6 flex justify-between items-center shadow-sm">
+                      <div><p className="font-black italic text-brand-dark uppercase">{s.studentName}</p><p className="text-[10px] font-bold text-brand-primary uppercase tracking-widest">{s.subject}</p></div>
+                      <div className="text-right text-xs font-bold"><p className="text-brand-dark">{fmtDate(s.date)}</p><p className="text-slate-400">{fmtTime(s.start_time)} - {fmtTime(s.end_time)}</p></div>
+                    </div>
+                  ))}
                 </div>
               </motion.div>
-            )}
-
-            {activeTab === 'class' && (
-              <motion.div key="c" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col p-8">
+            ) : (
+              <motion.div key="class" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col p-8">
                 {isClassLocked() ? (
                   <div className="flex-1 flex items-center justify-center text-center">
                     <div className="max-w-md">
                       <div className="w-20 h-20 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6"><Lock className="w-8 h-8 text-amber-500" /></div>
                       <h3 className="text-2xl font-black uppercase italic text-brand-dark mb-2">{isClassEnded(selectedStudent) ? 'Session Terminated' : 'Terminal Locked'}</h3>
-                      <p className="text-xs text-slate-400 uppercase font-bold tracking-widest leading-relaxed">
-                        {isClassEnded(selectedStudent) 
-                          ? 'This session has reached its full duration. Archive data is being processed.' 
-                          : 'Live instruction terminal will unlock automatically at the scheduled time.'}
-                      </p>
-                      {!isClassEnded(selectedStudent) && getCountdown() && (
-                        <div className="mt-8 px-8 py-4 bg-brand-dark text-brand-primary rounded-2xl inline-block shadow-2xl">
-                          <p className="text-[10px] font-black uppercase tracking-[4px] mb-1 opacity-50">Activation In</p>
-                          <p className="text-3xl font-black">{getCountdown()}</p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 ) : (
                   <div className="h-full flex flex-col max-w-4xl mx-auto w-full">
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-4 mb-6 flex items-center justify-between shadow-sm">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-                          <Wifi className="w-5 h-5 text-emerald-500 animate-pulse" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Session Live</p>
-                          <p className="text-sm font-black text-brand-dark uppercase italic">{selectedStudent?.name}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <div className="text-right">
-                          <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/50 mb-0.5">Time Limit</p>
-                          <p className="text-xs font-bold text-emerald-700">{fmtTime(getActiveSlot()?.start_time || '00:00')} - {fmtTime(getActiveSlot()?.end_time || '00:00')}</p>
-                        </div>
-                        <div className="h-8 w-px bg-emerald-200" />
-                        <div className="text-right min-w-[80px]">
-                          <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/50 mb-0.5">Ending In</p>
-                          <p className="text-xl font-black text-emerald-700 font-mono tracking-tighter">{getTimeLeft()}</p>
-                        </div>
-                      </div>
-                    </div>
                     <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
-                      {classMsgs.length === 0 && <div className="py-20 text-center text-slate-300 font-black uppercase tracking-[3px] italic">Live Stream Active: No data manifest yet...</div>}
                       {classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
                       <div ref={classBottomRef} />
                     </div>
