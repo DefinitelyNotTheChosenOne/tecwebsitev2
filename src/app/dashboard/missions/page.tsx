@@ -93,9 +93,17 @@ export default function SpecialistMissionBoard() {
         
         let dynamicSubject = "Direct Handshake";
         // Logic to extract subject if it exists in the message chain
-        const latestMsg = (room.chat_messages || []).sort((a: any, b: any) => 
+        const msgs = (room.chat_messages || []).sort((a: any, b: any) => 
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )[0];
+        );
+        const latestMsg = msgs[0];
+
+        if (latestMsg && latestMsg.content) {
+            const match = latestMsg.content.match(/requested a (.+) session/i);
+            if (match && match[1]) {
+              dynamicSubject = match[1];
+            }
+        }
 
         return {
           ...room,

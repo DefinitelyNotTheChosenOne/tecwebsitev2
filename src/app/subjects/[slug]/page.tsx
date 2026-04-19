@@ -309,7 +309,7 @@ export default function SubjectMarketFeed() {
                        </div>
 
                        <div className="grid grid-cols-2 gap-4">
-                          <Link href={`/tutors/${tutor.id}`} className="px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest text-center hover:bg-white/10 transition-all">
+                          <Link href={`/tutors/${tutor.id}?subject=${encodeURIComponent(subjectName)}`} className="px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest text-center hover:bg-white/10 transition-all">
                              View Dossier
                           </Link>
                           {sentRequests.includes(tutor.id) ? (

@@ -8,10 +8,12 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 export default function PublicTutorPortfolio() {
   const { id } = useParams();
+  const searchParams = useSearchParams();
+  const targetSubject = searchParams.get('subject') || 'Direct Handshake';
   const [tutor, setTutor] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -59,7 +61,7 @@ export default function PublicTutorPortfolio() {
       await supabase.from('chat_messages').insert({
         room_id: room.id,
         sender_id: currentUser.id,
-        content: `SIGNAL INITIATED: Student has requested a specialized session.`
+        content: `SIGNAL INITIATED: Student has requested a ${targetSubject} session.`
       });
 
       // 4. Deploy User to Terminal
