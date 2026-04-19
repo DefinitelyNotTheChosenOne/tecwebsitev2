@@ -86,10 +86,8 @@ export default function SpecialistMissionBoard() {
       .filter((room: any) => {
         const hasSession = sessionRoomIds.has(room.id);
         const msgs = room.chat_messages || [];
-        msgs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const latestMsg = msgs[0];
-        const isPendingTunnel = latestMsg && latestMsg.content.startsWith('SIGNAL INITIATED');
-        return !hasSession && isPendingTunnel;
+        // Show any room that doesn't have a session, even if messages are empty or don't match the specific string
+        return !hasSession;
       })
       .map((room: any) => {
         const msgs = room.chat_messages || [];
@@ -138,25 +136,25 @@ export default function SpecialistMissionBoard() {
 
     // 4. Real-time Subscription for Incoming Handshaking
     const chan = supabase.channel(`missions-live-${Math.random()}`);
-    chan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_rooms' }, () => {
-      setToast("NEW INBOUND TUNNEL DETECTED");
-      fetchMissions();
-      setTimeout(() => setToast(null), 5000);
+    chan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_rooms' }, (payload) => {
+      // Use the profile state if available
+      if (payload.new.tutor_id === profile?.id) {
+        setToast("NEW INBOUND TUNNEL DETECTED");
+        fetchMissions();
+        setTimeout(() => setToast(null), 5000);
+      }
     });
     chan.subscribe();
     channelRef.current = chan;
 
     // 5. Also listen for new messages (signals in existing rooms)
-    const msgChan = supabase.channel(`missions-msgs-${Math.random()}`);
-    msgChan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-      if (payload.new.content.startsWith('SIGNAL INITIATED')) {
-        setToast("NEW HANDSHAKE SIGNAL ENCRYPTED");
-        fetchMissions();
-        setTimeout(() => setToast(null), 5000);
-      }
+    const msgChannel = supabase.channel(`missions-msgs-${Math.random()}`);
+    msgChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+      // Refresh on any new message in a visible room
+      fetchMissions();
     });
-    msgChan.subscribe();
-    msgChannelRef.current = msgChan;
+    msgChannel.subscribe();
+    msgChannelRef.current = msgChannel;
 
     return () => { 
       if (channelRef.current) supabase.removeChannel(channelRef.current);
