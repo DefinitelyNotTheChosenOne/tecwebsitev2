@@ -387,27 +387,28 @@ export default function SessionPage() {
 
     if (schedErr) { setConflictError('Failed to save schedule. Try again.'); console.error(schedErr); return; }
 
-    const newSlot: ClassSlot = { id: Date.now(), studentName: selectedStudent.name, subject: selectedStudent.subject, date: formDate, startTime: formStart, endTime: formEnd };
-    setSlots(p => [...p, newSlot]); setLawrenceSlot(newSlot); setFormDate(''); setFormStart(''); setFormEnd('');
-    
     // Notify student via chat
     await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser?.id, content: `📅 Class scheduled: ${fmtDate(formDate)} at ${fmtTime(formStart)} - ${fmtTime(formEnd)}` });
+
+    // Ensure the Live Class terminal unlocks by injecting the schedule into the active student state
+    const dbFormatSchedule = { class_date: formDate, start_time: formStart, end_time: formEnd };
+    
+    // Update local student instance
+    const updatedStudent = { ...selectedStudent, schedules: [...(selectedStudent as any).schedules || [], dbFormatSchedule] };
+    setSelectedStudent(updatedStudent);
+    
+    // Update main students list
+    setStudents(prev => prev.map(s => s.id === selectedStudent.id ? updatedStudent : s));
+    
+    const newSlot: ClassSlot = { id: Date.now(), studentName: selectedStudent.name, subject: selectedStudent.subject, date: formDate, startTime: formStart, endTime: formEnd };
+    setSlots(p => [...p, newSlot]);
+    setFormDate(''); setFormStart(''); setFormEnd('');
   };
 
   const sendDiscMsg = async () => {
     if (!discInput.trim() || !selectedStudent?.roomId || !currentUser) return;
     const content = discInput.trim(); 
     setDiscInput('');
-
-    // Optimistic Update
-    const optimisticId = Math.floor(Math.random() * 1000000);
-    const optimisticMsg: Message = {
-      id: optimisticId,
-      sender: 'tutor',
-      text: content,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optimisticMsg] }));
 
     const { error } = await supabase.from('chat_messages').insert({ 
       room_id: selectedStudent.roomId, 
@@ -417,7 +418,6 @@ export default function SessionPage() {
 
     if (error) {
        console.error("Signal Failed:", error.message);
-       setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== optimisticId) }));
     }
   };
 
@@ -425,16 +425,6 @@ export default function SessionPage() {
     if (!classInput.trim() || isClassLocked() || !selectedStudent || !currentUser) return;
     const content = classInput.trim(); 
     setClassInput('');
-
-    // Optimistic Update
-    const optId = Math.floor(Math.random() * 1000000);
-    const optMsg: Message = {
-      id: optId,
-      sender: 'tutor',
-      text: content,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optMsg] }));
 
     const { error } = await supabase.from('live_class_messages').insert({
       room_id: selectedStudent.roomId,
@@ -444,7 +434,6 @@ export default function SessionPage() {
 
     if (error) {
       console.error("Signal Failed:", error.message);
-      setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== optId) }));
     }
   };
 

@@ -359,15 +359,6 @@ export default function StudentSessionsPage() {
     const content = msgInput.trim(); 
     setMsgInput('');
 
-    // Optimistic Update: Manifest the signal locally first
-    const optimisticMsg: Message = {
-      id: crypto.randomUUID(),
-      sender: 'student',
-      text: content,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setMessages(prev => [...prev, optimisticMsg]);
-
     const { error } = await supabase.from('chat_messages').insert({ 
       room_id: selectedSession.roomId, 
       sender_id: currentUser.id, 
@@ -376,8 +367,6 @@ export default function StudentSessionsPage() {
 
     if (error) {
       console.error("Transmission Error:", error.message);
-      // Remove the optimistic message if it failed
-      setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
     }
   };
 
@@ -385,15 +374,6 @@ export default function StudentSessionsPage() {
     if (!classInput.trim() || !isClassActive() || !selectedSession || !currentUser) return;
     const content = classInput.trim(); 
     setClassInput('');
-
-    // Optimistic Update
-    const optMsg: Message = {
-      id: crypto.randomUUID(),
-      sender: 'student',
-      text: content,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setClassMessages(prev => [...prev, optMsg]);
 
     const { error } = await supabase.from('live_class_messages').insert({
       room_id: selectedSession.roomId,
@@ -403,7 +383,6 @@ export default function StudentSessionsPage() {
 
     if (error) {
       console.error("Signal Failed:", error.message);
-      setClassMessages(prev => prev.filter(m => m.id !== optMsg.id));
     }
   };
 
