@@ -193,7 +193,19 @@ export default function SessionPage() {
         }
       }
       
-      setSlots(schedules || []);
+      // Map raw schedules to expected ClassSlot format to prevent render crashes
+      const mappedSlots = (schedules || []).map((s: any) => {
+        const matchingStudent = studentList.find(st => st.roomId === s.room_id);
+        return {
+          id: s.id,
+          studentName: matchingStudent?.name || 'Unknown',
+          subject: matchingStudent?.subject || 'Session',
+          date: s.class_date,
+          startTime: s.start_time,
+          endTime: s.end_time
+        };
+      });
+      setSlots(mappedSlots);
       setLoading(false);
     } catch (err) {
       console.error('Error:', err);
