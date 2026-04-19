@@ -76,9 +76,10 @@ export default function SpecialistMissionBoard() {
     // 3. Filter rooms: Hide if there's an existing class OR if specialist has already engaged (sent a message)
     const { data: existingSessions } = await supabase
       .from('tutoring_sessions')
-      .select('room_id');
+      .select('room_id')
+      .eq('tutor_id', prof.id); // Optimized filter to prevent potential 400/large payload errors
     
-    const sessionRoomIds = new Set(existingSessions?.map(s => s.room_id) || []);
+    const sessionRoomIds = new Set((existingSessions as any[])?.filter(s => s.room_id).map(s => s.room_id) || []);
     
     const refinedDirect = (directRooms || [])
       .filter(room => {
@@ -107,18 +108,22 @@ export default function SpecialistMissionBoard() {
     fetchMissionsStable();
 
     // 4. Real-time Subscription for Incoming Handshaking
-    const channel = supabase
-      .channel('missions-live')
+    const channel = supabase.channel('missions-live');
+    
+    channel
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
         table: 'chat_rooms'
       }, () => {
+        // Trigger a fresh fetch when a new room is detected
         fetchMissions();
       })
       .subscribe();
 
-    return () => { channel.unsubscribe(); };
+    return () => { 
+      supabase.removeChannel(channel);
+    };
   }, [fetchMissionsStable]);
 
   const initiateDiscussion = async (mission: any) => {

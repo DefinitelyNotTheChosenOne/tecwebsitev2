@@ -25,15 +25,16 @@ export default function UserDashboard() {
   const [notifications, setNotifications] = useState<any[]>([]);
 
   useEffect(() => {
+    let channel: any;
     const fetchProfile = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+          const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
           setProfile(data);
           setIsTutor(data?.role === 'seller');
           fetchNotifications(user.id);
-          subscribeToSignals(user.id);
+          channel = subscribeToSignals(user.id);
           
           if (data?.role === 'admin') router.push('/admin/dashboard');
           
@@ -76,6 +77,9 @@ export default function UserDashboard() {
       }
     };
     fetchProfile();
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [router]);
 
   const fetchNotifications = async (uid: string) => {
@@ -89,12 +93,15 @@ export default function UserDashboard() {
   };
 
   const subscribeToSignals = (uid: string) => {
-    supabase
-      .channel(`signals-${uid}`)
+    const channel = supabase.channel(`signals-${uid}`);
+    
+    channel
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, (payload) => {
         setNotifications(prev => [payload.new, ...prev].slice(0, 10));
       })
       .subscribe();
+
+    return channel;
   };
 
   const handleSignOut = async () => {
