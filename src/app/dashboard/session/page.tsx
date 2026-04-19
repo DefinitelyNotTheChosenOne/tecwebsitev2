@@ -5,7 +5,7 @@ import {
   ChevronLeft, Send, MessageSquare, CalendarDays,
   Clock, User, CheckCircle2, Zap, BookOpen,
   Lock, AlertTriangle, Users, MessageCircle, Search,
-  Filter, MoreVertical, Star, Shield, Wifi
+  Filter, MoreVertical, Star, Shield, Wifi, X, Trash2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -133,6 +133,27 @@ export default function SessionPage() {
   const channelRef = useRef<any>(null);
   const [isStudentTyping, setIsStudentTyping] = useState(false);
   const typingTimeoutRef = useRef<any>(null);
+
+  const deleteSession = async (roomId: string, studentName: string) => {
+    if (!confirm(`Are you sure you want to permanently delete the session with ${studentName}? This will clear all schedules and history.`)) return;
+    
+    try {
+      // 1. Delete scheduled classes
+      await supabase.from('scheduled_classes').delete().eq('room_id', roomId);
+      // 2. Delete the tutoring session record
+      await supabase.from('tutoring_sessions').delete().eq('room_id', roomId);
+      
+      // 3. UI Update
+      setStudents(prev => prev.filter(s => s.roomId !== roomId));
+      if (selectedStudent?.roomId === roomId) {
+        setSelectedStudent(null);
+      }
+      alert("Session Terminated Successfully.");
+    } catch (err) {
+      console.error(err);
+      alert("Critical: Termination Signal Failed.");
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -587,18 +608,28 @@ export default function SessionPage() {
                return (finished || !s.isAccepted) && matchesSearch;
             }
           }).map(s => (
-            <button key={s.id} onClick={() => { setSelectedStudent(s); setActiveTab('discussion'); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
-              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-black ${selectedStudent?.id === s.id ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>{s.initial}</div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start mb-0.5">
-                  <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p>
-                  {isClassEnded(s) && (
-                    <span className="text-[7px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded uppercase">FIN</span>
-                  )}
+            <div key={s.id} className="relative group/item">
+              <button onClick={() => { setSelectedStudent(s); setActiveTab('discussion'); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all relative ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-black ${selectedStudent?.id === s.id ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>{s.initial}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-start mb-0.5">
+                    <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p>
+                    {isClassEnded(s) && (
+                      <span className="text-[7px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded uppercase">FIN</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary leading-none">{s.subject}</p>
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary leading-none">{s.subject}</p>
-              </div>
-            </button>
+              </button>
+              
+              <button 
+                onClick={(e) => { e.stopPropagation(); deleteSession(s.roomId, s.name); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-red-50 text-red-400 rounded-lg opacity-0 group-hover/item:opacity-100 transition-all hover:bg-red-500 hover:text-white z-10"
+                title="Delete Session"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           ))}
         </div>
         <div className="p-4 border-t border-slate-100 bg-white flex items-center gap-3">
