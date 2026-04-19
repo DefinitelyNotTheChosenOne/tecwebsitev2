@@ -46,6 +46,8 @@ type StudentProfile = {
   lastMsg: string;
   status: 'active' | 'pending';
   lastActive: string;
+  isAccepted: boolean;
+  schedules?: any[];
 };
 
 // ─── Utilities ──────────────────────────────────────────────────────────
@@ -165,7 +167,7 @@ export default function SessionPage() {
 
       const { data: sessData } = await supabase
         .from('tutoring_sessions')
-        .select(`student_id, help_requests (subject)`)
+        .select(`student_id, status, help_requests (subject)`)
         .eq('tutor_id', userId);
 
       const { data: schedules } = await supabase
@@ -185,7 +187,7 @@ export default function SessionPage() {
       const studentList = (rooms || [])
         .filter((room: any) => activeRoomIds.has(room.id) || room.id === targetRoomId) // Ensure target room is shown even if empty
         .map((room: any) => {
-          const session = sessData?.find(s => s.student_id === room.student_id);
+          const session = sessData?.find(s => s.student_id === room.student_id) as any;
           const name = (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.full_name || 'Anonymous Student';
           const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
           
@@ -193,7 +195,7 @@ export default function SessionPage() {
             id: room.student_id,
             roomId: room.id,
             name: name,
-            subject: (session?.help_requests as any)?.subject || 'General Discussion',
+            subject: session?.help_requests?.subject || 'General Discussion',
             initial: name.charAt(0).toUpperCase(),
             lastMsg: '...', 
             status: session?.status === 'accepted' ? 'active' : 'pending',
@@ -493,9 +495,9 @@ export default function SessionPage() {
         <div className="p-8 pb-4">
            <h2 className="text-xl font-black text-brand-dark uppercase italic tracking-tighter mb-8 flex items-center justify-between">
               Students
-              <div className="flex bg-white border border-slate-100 p-0.5 rounded-lg">
-                <button onClick={() => setSidebarFilter('active')} className={`px-2 py-1 text-[8px] font-black uppercase rounded ${sidebarFilter === 'active' ? 'bg-brand-primary text-brand-dark' : 'text-slate-400'}`}>Active</button>
-                <button onClick={() => setSidebarFilter('past')} className={`px-2 py-1 text-[8px] font-black uppercase rounded ${sidebarFilter === 'past' ? 'bg-brand-primary text-brand-dark' : 'text-slate-400'}`}>Past</button>
+              <div className="flex bg-white border border-slate-100 p-1 rounded-xl shadow-sm">
+                <button onClick={() => setSidebarFilter('active')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${sidebarFilter === 'active' ? 'bg-brand-primary text-brand-dark shadow-md' : 'text-slate-400 hover:text-brand-dark'}`}>Active</button>
+                <button onClick={() => setSidebarFilter('past')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${sidebarFilter === 'past' ? 'bg-brand-primary text-brand-dark shadow-md' : 'text-slate-400 hover:text-brand-dark'}`}>Past</button>
               </div>
            </h2>
            <div className="relative group">
