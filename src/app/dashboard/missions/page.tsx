@@ -83,30 +83,37 @@ export default function SpecialistMissionBoard() {
     const sessionRoomIds = new Set((existingSessions as any[])?.filter(s => s.room_id).map(s => s.room_id) || []);
     
     const refinedDirect = (directRooms || [])
-      .filter(room => {
+      .filter((room: any) => {
         const hasSession = sessionRoomIds.has(room.id);
-        const msgs = (room as any).chat_messages || [];
-        
-        // Sort to find the latest message
+        const msgs = room.chat_messages || [];
+        msgs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const latestMsg = msgs[0];
+        const isPendingTunnel = latestMsg && latestMsg.content.startsWith('SIGNAL INITIATED');
+        return !hasSession && isPendingTunnel;
+      })
+      .map((room: any) => {
+        const msgs = room.chat_messages || [];
         msgs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const latestMsg = msgs[0];
         
-        // It's an active request if the very last message is an initiation signal
-        const isPendingTunnel = latestMsg && latestMsg.content.startsWith('SIGNAL INITIATED');
-        
-        // Show if no official session exists AND the latest ping is a tunnel request
-        return !hasSession && isPendingTunnel;
-      })
-      .map(room => {
         const studentProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
+        
+        let dynamicSubject = "Direct Handshake";
+        if (latestMsg && latestMsg.content) {
+           const match = latestMsg.content.match(/requesting a (.+) session/i);
+           if (match && match[1]) {
+             dynamicSubject = match[1];
+           }
+        }
+
         return {
           ...room,
-          profiles: studentProfile, // Flatten for consistent UI access
+          profiles: studentProfile,
           isDirect: true,
-          subject: "Direct Handshake",
+          subject: dynamicSubject,
           title: `Direct Tunnel with ${studentProfile?.full_name || 'Student'}`,
           description: "Student initiated a secure connection via Specialist Market Feed.",
-          created_at: room.created_at,
+          created_at: latestMsg?.created_at || room.created_at,
           student_id: room.student_id
         };
       });
