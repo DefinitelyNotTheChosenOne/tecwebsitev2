@@ -48,6 +48,7 @@ type StudentProfile = {
   lastActive: string;
   isAccepted: boolean;
   schedules?: any[];
+  latestSignalTime?: number | null;
 };
 
 // ─── Utilities ──────────────────────────────────────────────────────────
@@ -213,18 +214,22 @@ export default function SessionPage() {
           
           let subject = session?.help_requests?.subject;
           
-          // Fallback for direct tunnels: Parse subject from the initial signal message
-          if (!subject) {
-             const { data: signalMsg } = await supabase
-               .from('chat_messages')
-               .select('content')
-               .eq('room_id', room.id)
-               .ilike('content', 'Discussion Started for%')
-               .maybeSingle();
-             
-             if (signalMsg) {
-                subject = signalMsg.content.split('"')[1] || signalMsg.content.split('for ')[1];
+          // Always fetch the latest discussion signal to check for re-opened sessions
+          const { data: signalMsg } = await supabase
+            .from('chat_messages')
+            .select('content, created_at')
+            .eq('room_id', room.id)
+            .ilike('content', 'Discussion Started for%')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+            
+          let latestSignalTime = null;
+          if (signalMsg) {
+             if (!subject) {
+               subject = signalMsg.content.split('"')[1] || signalMsg.content.split('for ')[1];
              }
+             latestSignalTime = new Date(signalMsg.created_at).getTime();
           }
 
           return {
@@ -237,6 +242,7 @@ export default function SessionPage() {
             status: (session?.status === 'accepted' ? 'active' : 'pending') as 'active' | 'pending',
             lastActive: 'Just now',
             schedules: roomSchedules,
+            latestSignalTime,
             isAccepted: session?.status === 'accepted' || !!session
           };
         }));
@@ -441,9 +447,19 @@ export default function SessionPage() {
     // If no schedules are created yet, it's a new discussion/pending session, so it's NOT ended.
     if (studentSchedules.length === 0) return false; 
     
-    // It's only ended if the last schedule is in the past
+    // Check if the last schedule is in the past
     const last = studentSchedules[studentSchedules.length - 1];
-    return now > toDate(last.class_date, last.end_time);
+    const lastEndTime = toDate(last.class_date, last.end_time).getTime();
+    
+    // If the schedule is over, but there's a new signal AFTER it, they are active again!
+    if (now.getTime() > lastEndTime) {
+       if (student.latestSignalTime && student.latestSignalTime > lastEndTime) {
+         return false;
+       }
+       return true;
+    }
+    
+    return false;
   };
 
   const getTimeLeft = () => {
