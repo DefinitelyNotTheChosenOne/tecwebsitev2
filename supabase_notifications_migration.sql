@@ -44,7 +44,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER tutor_accept_trigger
 AFTER UPDATE ON tutoring_sessions
@@ -76,13 +76,13 @@ BEGIN
         'Incoming Signal',
         sender_name || ' sent you a message.',
         CASE 
-            WHEN recipient_id IN (SELECT id FROM profiles WHERE role = 'buyer') THEN '/sessions'
+            WHEN recipient_id IN (SELECT id FROM profiles WHERE role = 'user') THEN '/sessions'
             ELSE '/dashboard/session'
         END
     );
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER new_message_trigger
 AFTER INSERT ON chat_messages
@@ -106,7 +106,7 @@ BEGIN
       );
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER new_schedule_trigger
 AFTER INSERT ON scheduled_classes
