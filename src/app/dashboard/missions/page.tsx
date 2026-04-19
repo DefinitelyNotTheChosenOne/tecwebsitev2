@@ -85,24 +85,17 @@ export default function SpecialistMissionBoard() {
     const refinedDirect = (directRooms || [])
       .filter((room: any) => {
         const hasSession = sessionRoomIds.has(room.id);
-        const msgs = room.chat_messages || [];
-        // Show any room that doesn't have a session, even if messages are empty or don't match the specific string
         return !hasSession;
       })
       .map((room: any) => {
-        const msgs = room.chat_messages || [];
-        msgs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const latestMsg = msgs[0];
-        
+        // Handle Supabase joining returning either an object or an array of objects
         const studentProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
         
         let dynamicSubject = "Direct Handshake";
-        if (latestMsg && latestMsg.content) {
-           const match = latestMsg.content.match(/requesting a (.+) session/i);
-           if (match && match[1]) {
-             dynamicSubject = match[1];
-           }
-        }
+        // Logic to extract subject if it exists in the message chain
+        const latestMsg = (room.chat_messages || []).sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )[0];
 
         return {
           ...room,
