@@ -219,12 +219,15 @@ export default function StudentSessionsPage() {
         .order('created_at', { ascending: true });
 
       if (dData) {
-        setMessages(dData.map((m: any) => ({
-          id: m.id,
-          sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
-          text: m.content,
-          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        })));
+        setMessages(dData
+          .filter((m: any) => !m.content.startsWith('SIGNAL INITIATED:') && !m.content.startsWith('SIGNAL ACCEPTED:') && !m.content.startsWith('SIGNAL REJECTED:'))
+          .map((m: any) => ({
+            id: m.id,
+            sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }))
+        );
       }
 
       // Fetch Live Class Messages
@@ -252,6 +255,8 @@ export default function StudentSessionsPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
         const m = payload.new as any;
         if (m.room_id !== selectedSession.roomId) return;
+        // Block system handshake signals from appearing as chat messages
+        if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:')) return;
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
           const msg: Message = {

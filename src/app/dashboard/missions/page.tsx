@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import { 
@@ -95,8 +95,11 @@ export default function SpecialistMissionBoard() {
     setLoading(false);
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fetchMissionsStable = useCallback(fetchMissions, []);
+
   useEffect(() => {
-    fetchMissions();
+    fetchMissionsStable();
 
     // 4. Real-time Subscription for Incoming Handshaking
     const channel = supabase
@@ -111,7 +114,7 @@ export default function SpecialistMissionBoard() {
       .subscribe();
 
     return () => { channel.unsubscribe(); };
-  }, [router]);
+  }, [fetchMissionsStable]);
 
   const initiateDiscussion = async (mission: any) => {
     if (!profile) return;
