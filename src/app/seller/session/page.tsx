@@ -551,7 +551,7 @@ export default function SessionPage() {
             sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === currentUser?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) as MessageStatus : undefined
+            status: m.sender_id === currentUser?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus : undefined
           }));
         mergeDiscMsgs(mapped);
       }
@@ -563,7 +563,7 @@ export default function SessionPage() {
           sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
           text: m.content,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: m.sender_id === currentUser?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) as MessageStatus : undefined
+          status: m.sender_id === currentUser?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus : undefined
         }));
         setAllClassMsgs(prev => {
           const existing = prev[selectedStudent.id] || [];
@@ -582,6 +582,10 @@ export default function SessionPage() {
     fetchMsgs();
     const pollInterval = setInterval(fetchMsgs, 2500);
 
+    // ── Login Catch-Up ──
+    supabase.from('chat_messages').update({ status: 'delivered', delivered_at: new Date().toISOString() }).eq('room_id', selectedStudent.roomId).neq('sender_id', currentUser.id).eq('status', 'sent').then();
+    supabase.from('live_class_messages').update({ status: 'delivered', delivered_at: new Date().toISOString() }).eq('room_id', selectedStudent.roomId).neq('sender_id', currentUser.id).eq('status', 'sent').then();
+
     const channelName = `session:${selectedStudent.roomId}`;
     supabase.removeChannel(supabase.channel(channelName));
 
@@ -596,11 +600,11 @@ export default function SessionPage() {
         const user = currentUserRef.current;
         if (!student || m.room_id !== student.roomId) return;
         
-        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) : undefined;
+        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) : undefined;
 
         if (type === 'INSERT') {
-          if (m.sender_id !== user?.id && !m.delivered_at) {
-             supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+          if (m.sender_id !== user?.id && m.status === 'sent') {
+             supabase.from('chat_messages').update({ delivered_at: new Date().toISOString(), status: 'delivered' }).eq('id', m.id).then();
              if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: student.roomId, msgId: m.id } });
           }
           if (m.content.startsWith('SIGNAL') || m.content.startsWith('Discussion Started')) return;
@@ -633,11 +637,11 @@ export default function SessionPage() {
         const user = currentUserRef.current;
         if (!student || m.room_id !== student.roomId) return;
         
-        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) : undefined;
+        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) : undefined;
 
         if (type === 'INSERT') {
-          if (m.sender_id !== user?.id && !m.delivered_at) {
-             supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+          if (m.sender_id !== user?.id && m.status === 'sent') {
+             supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString(), status: 'delivered' }).eq('id', m.id).then();
              if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: student.roomId, msgId: m.id } });
           }
           setAllClassMsgs(prev => {

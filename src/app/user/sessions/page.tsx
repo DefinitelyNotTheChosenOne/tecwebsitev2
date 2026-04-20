@@ -503,7 +503,7 @@ export default function StudentSessionsPage() {
               text: m.content,
               time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               status: m.sender_id === currentUser.id
-                ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) as MessageStatus
+                ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus
                 : undefined
             })),
           setMessages
@@ -524,7 +524,7 @@ export default function StudentSessionsPage() {
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             status: m.sender_id === currentUser.id
-              ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) as MessageStatus
+              ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus
               : undefined
           })),
           setClassMessages
@@ -534,6 +534,10 @@ export default function StudentSessionsPage() {
 
     fetchMsgs();
     const pollInterval = setInterval(fetchMsgs, 2500);
+
+    // ── Login Catch-Up ──
+    supabase.from('chat_messages').update({ status: 'delivered', delivered_at: new Date().toISOString() }).eq('room_id', selectedSession.roomId).neq('sender_id', currentUser.id).eq('status', 'sent').then();
+    supabase.from('live_class_messages').update({ status: 'delivered', delivered_at: new Date().toISOString() }).eq('room_id', selectedSession.roomId).neq('sender_id', currentUser.id).eq('status', 'sent').then();
 
     const channelName = `session:${selectedSession.roomId}`;
     supabase.removeChannel(supabase.channel(channelName));
@@ -551,8 +555,8 @@ export default function StudentSessionsPage() {
         if (!sess || m.room_id !== sess.roomId) return;
 
         // Auto-mark as delivered if we're the receiver
-        if (m.sender_id !== user?.id && !m.delivered_at) {
-          supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+        if (m.sender_id !== user?.id && m.status === 'sent') {
+          supabase.from('chat_messages').update({ delivered_at: new Date().toISOString(), status: 'delivered' }).eq('id', m.id).then();
           if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: sess.roomId, msgId: m.id } });
         }
 
@@ -574,7 +578,7 @@ export default function StudentSessionsPage() {
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
         if (m.sender_id !== user?.id) return; // only care about OUR messages being updated
-        const status: MessageStatus = m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent');
+        const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent');
         setMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
       .on('broadcast', { event: 'new_message' }, (payload: { payload: any }) => {
@@ -593,8 +597,8 @@ export default function StudentSessionsPage() {
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
-        if (m.sender_id !== user?.id && !m.delivered_at) {
-           supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+        if (m.sender_id !== user?.id && m.status === 'sent') {
+           supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString(), status: 'delivered' }).eq('id', m.id).then();
            if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: sess.roomId, msgId: m.id } });
         }
         setClassMessages(prev => {
@@ -612,7 +616,7 @@ export default function StudentSessionsPage() {
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
         if (m.sender_id !== user?.id) return;
-        const status: MessageStatus = m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent');
+        const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent');
         setClassMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
       .on('broadcast', { event: 'new_class_message' }, (payload: { payload: any }) => {
