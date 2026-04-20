@@ -49,6 +49,7 @@ type StudentProfile = {
   status: 'active' | 'pending';
   lastActive: string;
   isAccepted: boolean;
+  hasUnread: boolean;
   schedules?: any[];
   latestSignalTime?: number | null;
 };
@@ -299,6 +300,13 @@ export default function SessionPage() {
         .filter((room: any) => activeRoomIds.has(room.id) || room.id === targetRoomId) 
         .map(async (room: any) => {
           const session = sessData?.find(s => s.student_id === room.student_id) as any;
+          const { count: unreadCount } = await supabase
+            .from('chat_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('room_id', room.id)
+            .neq('sender_id', userId)
+            .is('read_at', null);
+
           const name = (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.full_name || 'Anonymous Student';
           const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
           
@@ -337,7 +345,8 @@ export default function SessionPage() {
             lastActive: 'Just now',
             schedules: roomSchedules,
             latestSignalTime,
-            isAccepted: session?.status === 'accepted' || !!session || !!latestSignalTime
+            isAccepted: session?.status === 'accepted' || !!session || !!latestSignalTime,
+            hasUnread: (unreadCount || 0) > 0
           };
         }));
 
@@ -392,7 +401,13 @@ export default function SessionPage() {
         setStudents(prev => {
           const newList = [...prev];
           if (newList[studentIndex]) {
-            newList[studentIndex] = { ...newList[studentIndex], lastMsg: m.content, lastActive: 'Just Now' };
+            const isViewing = selectedStudentRef.current?.roomId === m.room_id;
+            newList[studentIndex] = { 
+              ...newList[studentIndex], 
+              lastMsg: m.content, 
+              lastActive: 'Just Now',
+              hasUnread: !isViewing
+            };
           }
           return newList;
         });
@@ -469,10 +484,17 @@ export default function SessionPage() {
         if (type === 'INSERT') {
           if (m.sender_id !== user?.id && !m.delivered_at) supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
           if (m.content.startsWith('SIGNAL') || m.content.startsWith('Discussion Started')) return;
+          
           setAllDiscMsgs(prev => {
             const studentMsgs = prev[student.id] || [];
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
-            return { ...prev, [student.id]: [...studentMsgs, { id: m.id, sender: m.sender_id === user?.id ? 'tutor' : 'student', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status }] };
+            
+            // ── Implicit Read Receipt: Student replied, so they saw previous tutoring messages ──
+            const list = m.sender_id !== user?.id 
+              ? studentMsgs.map(old => old.sender === 'tutor' ? { ...old, status: 'seen' as MessageStatus } : old)
+              : studentMsgs;
+
+            return { ...prev, [student.id]: [...list, { id: m.id, sender: m.sender_id === user?.id ? 'tutor' : 'student', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status }] };
           });
         } else if (type === 'UPDATE') {
           setAllDiscMsgs(prev => {
@@ -495,7 +517,13 @@ export default function SessionPage() {
           setAllClassMsgs(prev => {
             const studentMsgs = prev[student.id] || [];
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
-            return { ...prev, [student.id]: [...studentMsgs, { id: m.id, sender: m.sender_id === user?.id ? 'tutor' : 'student', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status }] };
+
+            // ── Implicit Read Receipt: Student replied, so they saw previous tutoring messages ──
+            const list = m.sender_id !== user?.id 
+              ? studentMsgs.map(old => old.sender === 'tutor' ? { ...old, status: 'seen' as MessageStatus } : old)
+              : studentMsgs;
+
+            return { ...prev, [student.id]: [...list, { id: m.id, sender: m.sender_id === user?.id ? 'tutor' : 'student', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status }] };
           });
         } else if (type === 'UPDATE') {
           setAllClassMsgs(prev => {
@@ -523,6 +551,10 @@ export default function SessionPage() {
   // ── Mark messages as read when Specialist opens the Discussion tab ──────
   useEffect(() => {
     if (activeTab !== 'discussion' || !selectedStudent?.roomId || !currentUser?.id) return;
+    
+    // Clear sidebar unread dot instantly
+    setStudents(prev => prev.map(s => s.roomId === selectedStudent.roomId ? { ...s, hasUnread: false } : s));
+
     supabase
       .from('chat_messages')
       .update({ read_at: new Date().toISOString() })
@@ -671,7 +703,17 @@ export default function SessionPage() {
               <button onClick={() => { setSelectedStudent(s); setActiveTab('discussion'); setSidebarOpen(false); }} className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all ${selectedStudent?.id === s.id ? 'bg-white shadow-md border border-slate-100' : 'hover:bg-slate-100/80'}`}>
                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-black ${selectedStudent?.id === s.id ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>{s.initial}</div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p>
+                  <div className="flex justify-between items-center mr-1">
+                    <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.name}</p>
+                    {s.hasUnread && (
+                      <motion.div 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: [1, 1.3, 1] }}
+                        transition={{ repeat: Infinity, duration: 1.5 }}
+                        className="w-2 h-2 rounded-full bg-brand-primary shadow-[0_0_10px_rgba(255,185,0,0.6)]"
+                      />
+                    )}
+                  </div>
                   <p className="text-[10px] font-bold uppercase tracking-widest truncate text-brand-primary">{s.subject}</p>
                 </div>
               </button>

@@ -46,6 +46,7 @@ type TutorSession = {
   status: 'pending' | 'accepted' | 'declined';
   lastMsg: string;
   lastActive: string;
+  hasUnread: boolean;
   scheduledClasses: ScheduledClass[];
 };
 
@@ -259,10 +260,12 @@ export default function StudentSessionsPage() {
         const roomMessages = (allMessages || []).filter(m => m.room_id === room.id);
         const hasTutorResponse = roomMessages.some(m => m.sender_id === room.tutor_id);
 
-        const initiationMsg = roomMessages.find(m => m.content.startsWith('SIGNAL INITIATED:'));
-        const extractedSubject = initiationMsg 
-          ? initiationMsg.content.match(/requesting a (.+) session/)?.[1] || 'General Session'
+        const initiatingMsg = roomMessages.find(m => m.content.startsWith('SIGNAL INITIATED:'));
+        const extractedSubject = initiatingMsg 
+          ? initiatingMsg.content.match(/requesting a (.+) session/)?.[1] || 'General Session'
           : 'General Session';
+
+        const unreadCount = roomMessages.filter(m => m.sender_id === room.tutor_id && !m.read_at).length;
 
         return {
           id: room.tutor_id,
@@ -274,6 +277,7 @@ export default function StudentSessionsPage() {
           status: hasTutorResponse ? 'accepted' : 'pending',
           lastMsg: roomMessages[roomMessages.length - 1]?.content || 'Signal established...',
           lastActive: roomMessages[roomMessages.length - 1]?.created_at || room.created_at,
+          hasUnread: unreadCount > 0,
           scheduledClasses: roomSchedules,
         } as TutorSession;
       });
@@ -313,10 +317,12 @@ export default function StudentSessionsPage() {
           const newList = [...prev];
           if (newList[sessionIndex]) {
             const isTutor = m.sender_id !== currentUser.id;
+            const isViewing = selectedSessionRef.current?.roomId === m.room_id && activeTab === 'discussion';
             newList[sessionIndex] = {
               ...newList[sessionIndex],
               status: isTutor ? 'accepted' : newList[sessionIndex].status,
-              lastActive: 'Just Now'
+              lastActive: 'Just Now',
+              hasUnread: isTutor && !isViewing
             };
           }
           return newList;
@@ -332,10 +338,12 @@ export default function StudentSessionsPage() {
           const newList = [...prev];
           if (newList[sessionIndex]) {
             const isTutor = m.sender_id !== currentUser.id;
+            const isViewing = selectedSessionRef.current?.roomId === m.room_id && activeTab === 'discussion';
             newList[sessionIndex] = {
               ...newList[sessionIndex],
               status: isTutor ? 'accepted' : newList[sessionIndex].status,
-              lastActive: 'Just Now'
+              lastActive: 'Just Now',
+              hasUnread: isTutor && !isViewing
             };
           }
           return newList;
@@ -354,6 +362,9 @@ export default function StudentSessionsPage() {
   // ─── Fetch messages for selected session ──────────────────────────
   useEffect(() => {
     if (!selectedSession?.roomId || !currentUser) return;
+
+    // Clear unread dot instantly when selecting
+    setSessions(prev => prev.map(s => s.roomId === selectedSession.roomId ? { ...s, hasUnread: false } : s));
 
     // Smart merge: only add truly new messages, never wipe (prevents polling duplicates)
     const mergeMsgs = (fetched: Message[], setter: React.Dispatch<React.SetStateAction<Message[]>>) => {
@@ -700,6 +711,15 @@ export default function StudentSessionsPage() {
       if (channelRef.current) {
         channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
       }
+
+      // ── Implicit Read: Sending a message proves we saw their messages ──
+      supabase.from('chat_messages')
+        .update({ read_at: new Date().toISOString() })
+        .eq('room_id', selectedSession.roomId)
+        .neq('sender_id', currentUser.id)
+        .is('read_at', null)
+        .then();
+
       const finalStatus: MessageStatus = isTutorOnline ? 'delivered' : 'sent';
       setMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: data.id, status: finalStatus } : m));
     }
@@ -733,6 +753,15 @@ export default function StudentSessionsPage() {
       if (channelRef.current) {
         channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
       }
+
+      // ── Implicit Read: Sending a message proves we saw their messages ──
+      supabase.from('live_class_messages')
+        .update({ read_at: new Date().toISOString() })
+        .eq('room_id', selectedSession.roomId)
+        .neq('sender_id', currentUser.id)
+        .is('read_at', null)
+        .then();
+
       const finalStatus: MessageStatus = isTutorOnline ? 'delivered' : 'sent';
       setClassMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: data.id, status: finalStatus } : m));
     }
@@ -844,7 +873,17 @@ export default function StudentSessionsPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start mb-0.5">
-                  <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.tutorName}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.tutorName}</p>
+                    {s.hasUnread && (
+                      <motion.div 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: [1, 1.3, 1] }}
+                        transition={{ repeat: Infinity, duration: 1.5 }}
+                        className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]"
+                      />
+                    )}
+                  </div>
                   <span className="text-[8px] font-bold text-slate-300 uppercase shrink-0">{s.lastActive}</span>
                 </div>
                 <p className={`text-[10px] font-black uppercase tracking-widest truncate leading-none ${s.status === 'accepted' ? 'text-emerald-500' : s.status === 'declined' ? 'text-red-400' : 'text-amber-500'}`}>
