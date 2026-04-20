@@ -782,9 +782,6 @@ export default function SessionPage() {
                   </div>
                 )}
               </motion.div>
-                  </div>
-                )}
-              </motion.div>
             )}
           </AnimatePresence>
         </div>
