@@ -437,7 +437,7 @@ export default function StudentSessionsPage() {
       supabase.removeChannel(channel); 
       channelRef.current = null;
     };
-  }, [selectedSession?.roomId]);  // Only re-run on actual room change, not on every render
+  }, [selectedSession?.roomId, currentUser?.id]);
 
   const handleTyping = () => {
     if (!channelRef.current) return;
