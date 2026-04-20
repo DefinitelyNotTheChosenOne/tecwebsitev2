@@ -242,7 +242,25 @@ export default function StudentSessionsPage() {
         setSessions(prev => {
           const newList = [...prev];
           if (newList[sessionIndex]) {
-            // Update status to accepted if tutor messages
+            const isTutor = m.sender_id !== currentUser.id;
+            newList[sessionIndex] = {
+              ...newList[sessionIndex],
+              status: isTutor ? 'accepted' : newList[sessionIndex].status,
+              lastActive: 'Just Now'
+            };
+          }
+          return newList;
+        });
+      })
+      .on('broadcast', { event: 'new_message' }, (payload) => {
+        const m = payload.payload;
+        const currentSessions = sessionsRef.current;
+        const sessionIndex = currentSessions.findIndex(s => s.roomId === m.room_id);
+        if (sessionIndex === -1) return;
+
+        setSessions(prev => {
+          const newList = [...prev];
+          if (newList[sessionIndex]) {
             const isTutor = m.sender_id !== currentUser.id;
             newList[sessionIndex] = {
               ...newList[sessionIndex],
@@ -312,13 +330,12 @@ export default function StudentSessionsPage() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'chat_messages',
-        filter: `room_id=eq.${selectedSession.roomId}`
+        table: 'chat_messages'
       }, (payload) => {
         const m = payload.new as any;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
-        if (!sess) return;
+        if (!sess || m.room_id !== sess.roomId) return;
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         
         setMessages(prev => {
@@ -352,13 +369,12 @@ export default function StudentSessionsPage() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'live_class_messages',
-        filter: `room_id=eq.${selectedSession.roomId}`
+        table: 'live_class_messages'
       }, (payload) => {
         const m = payload.new as any;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
-        if (!sess) return;
+        if (!sess || m.room_id !== sess.roomId) return;
         
         setClassMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;

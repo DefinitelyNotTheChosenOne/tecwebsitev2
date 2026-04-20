@@ -359,12 +359,30 @@ export default function SessionPage() {
         table: 'chat_messages'
       }, (payload) => {
         const m = payload.new as any;
-        // Verify this message belongs to one of our rooms
         const currentStudents = studentsRef.current;
         const studentIndex = currentStudents.findIndex(s => s.roomId === m.room_id);
         if (studentIndex === -1) return;
 
         // Skip signal messages for lastMsg preview
+        if (m.content.startsWith('SIGNAL') || m.content.startsWith('Discussion Started')) return;
+
+        setStudents(prev => {
+          const newList = [...prev];
+          if (newList[studentIndex]) {
+            newList[studentIndex] = {
+              ...newList[studentIndex],
+              lastMsg: m.content,
+              lastActive: 'Just Now'
+            };
+          }
+          return newList;
+        });
+      })
+      .on('broadcast', { event: 'new_message' }, (payload) => {
+        const m = payload.payload;
+        const currentStudents = studentsRef.current;
+        const studentIndex = currentStudents.findIndex(s => s.roomId === m.room_id);
+        if (studentIndex === -1) return;
         if (m.content.startsWith('SIGNAL') || m.content.startsWith('Discussion Started')) return;
 
         setStudents(prev => {
@@ -437,13 +455,12 @@ export default function SessionPage() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'chat_messages',
-        filter: `room_id=eq.${selectedStudent.roomId}`
+        table: 'chat_messages'
       }, (payload) => {
         const m = payload.new as any;
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
-        if (!student) return;
+        if (!student || m.room_id !== student.roomId) return;
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         setAllDiscMsgs(prev => {
           const studentMsgs = prev[student.id] || [];
@@ -460,13 +477,12 @@ export default function SessionPage() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'live_class_messages',
-        filter: `room_id=eq.${selectedStudent.roomId}`
+        table: 'live_class_messages'
       }, (payload) => {
         const m = payload.new as any;
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
-        if (!student) return;
+        if (!student || m.room_id !== student.roomId) return;
         setAllClassMsgs(prev => {
           const studentMsgs = prev[student.id] || [];
           if (studentMsgs.some(existing => existing.id === m.id)) return prev;
