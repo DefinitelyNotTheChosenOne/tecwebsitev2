@@ -1,14 +1,13 @@
 'use client';
 import { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  ChevronLeft, Send, MessageSquare, CalendarDays,
-  Clock, User, CheckCircle2, Check, CheckCheck, Zap, BookOpen,
-  Lock, AlertTriangle, Users, MessageCircle, Search,
-  Filter, MoreVertical, Star, Shield, Wifi, X, Trash2
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { usePresence, UserStatus } from '@/hooks/usePresence';
+import { 
+  Users, CalendarDays, History, BookOpen, Clock, 
+  CheckCircle2, Search, MessageCircle, 
+  Send, Bell, Filter, MoreVertical, X, Check, CheckCheck, Zap
+} from 'lucide-react';
 import Link from 'next/link';
 
 // ─── Custom scrollbar ───────────────────────────────────────────────────
@@ -202,10 +201,23 @@ export default function SessionPage() {
   const selectedStudentRef = useRef<StudentProfile | null>(null);
   const currentUserRef = useRef<any>(null);
   const studentsRef = useRef<StudentProfile[]>([]);
-  const [isStudentTyping, setIsStudentTyping] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED' | 'OFFLINE'>('CONNECTING');
-  const [isStudentOnline, setIsStudentOnline] = useState(false);
+  const [isStudentOnlineBackup, setIsStudentOnlineBackup] = useState(false); // Deprecated but kept for transition
   const typingTimeoutRef = useRef<any>(null);
+
+  // ─── Robust Presence System ──────────────────────────────────────
+  const { 
+    getRemoteStatus, 
+    emitTyping 
+  } = usePresence(currentUser?.id, selectedStudent?.roomId || null);
+
+  const studentState = selectedStudent ? getRemoteStatus(selectedStudent.id) : { status: 'offline', typing: false };
+  const isStudentOnline = studentState.status !== 'offline';
+  const isStudentTyping = studentState.typing;
+  const studentStatus = studentState.status;
+
+  const handleTyping = () => {
+    emitTyping(true);
+  };
 
   const deleteSession = async (roomId: string, studentName: string) => {
     if (!confirm(`Are you sure you want to PERMANENTLY delete the mission with ${studentName}? This will be reflected on all your devices.`)) return;
@@ -300,6 +312,12 @@ export default function SessionPage() {
         .filter((room: any) => activeRoomIds.has(room.id) || room.id === targetRoomId) 
         .map(async (room: any) => {
           const session = sessData?.find(s => s.student_id === room.student_id) as any;
+          const { data: studentProfile } = await supabase
+            .from('profiles')
+            .select('online_status, last_seen')
+            .eq('id', room.student_id)
+            .single();
+
           const { count: unreadCount } = await supabase
             .from('chat_messages')
             .select('*', { count: 'exact', head: true })
@@ -346,7 +364,9 @@ export default function SessionPage() {
             schedules: roomSchedules,
             latestSignalTime,
             isAccepted: session?.status === 'accepted' || !!session || !!latestSignalTime,
-            hasUnread: (unreadCount || 0) > 0
+            hasUnread: (unreadCount || 0) > 0,
+            onlineStatus: studentProfile?.online_status as UserStatus || 'offline',
+            lastSeen: studentProfile?.last_seen || null
           };
         }));
 
@@ -725,12 +745,32 @@ export default function SessionPage() {
       <main className="flex-1 flex flex-col min-w-0 bg-slate-50/20 md:ml-80">
         {selectedStudent && (
           <>
-            <header className="bg-white border-b border-slate-100 px-4 md:px-8 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button onClick={() => setSidebarOpen(true)} className="p-2 bg-slate-100 rounded-lg md:hidden"><Search className="w-4 h-4" /></button>
+            <header className="bg-white border-b border-slate-100 px-4 md:px-12 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button onClick={() => setSidebarOpen(true)} className="p-2 bg-slate-100 rounded-lg md:hidden hover:bg-slate-200 transition-all">
+                  <Search className="w-4 h-4 text-slate-500" />
+                </button>
                 <div className="flex flex-col items-start leading-none">
-                  <p className="text-[11px] font-black text-brand-dark uppercase italic">{selectedStudent.name}</p>
-                  <p className="text-[9px] font-bold text-brand-primary uppercase tracking-widest mt-1">{isStudentOnline ? 'Online Now' : 'Offline'}</p>
+                  <p className="text-[11px] font-black text-brand-dark uppercase italic tracking-tighter">{selectedStudent.name}</p>
+                  <p className={`text-[8px] font-black uppercase tracking-[2px] mt-1.5 ${
+                    studentStatus === 'online' ? 'text-green-500' : 
+                    studentStatus === 'idle' ? 'text-amber-500' : 'text-slate-400'
+                  }`}>
+                    {studentStatus === 'online' ? 'Online Now' : 
+                     studentStatus === 'idle' ? 'Idle System' : 'Offline'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className={`w-2.5 h-2.5 rounded-full ${
+                  studentStatus === 'online' ? 'bg-green-500 animate-pulse ring-4 ring-green-500/20' : 
+                  studentStatus === 'idle' ? 'bg-amber-500 ring-4 ring-amber-500/20' : 'bg-slate-300'
+                }`} title={`Status: ${studentStatus}`} />
+                <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                    Last Seen: {selectedStudent.lastActive}
+                  </span>
                 </div>
               </div>
             </header>

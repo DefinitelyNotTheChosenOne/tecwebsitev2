@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { usePresence, UserStatus } from '@/hooks/usePresence';
 import Link from 'next/link';
 
 // ─── Custom scrollbar ───────────────────────────────────────────────────
@@ -47,6 +48,8 @@ type TutorSession = {
   lastMsg: string;
   lastActive: string;
   hasUnread: boolean;
+  onlineStatus: UserStatus;
+  lastSeen: string | null;
   scheduledClasses: ScheduledClass[];
 };
 
@@ -194,11 +197,24 @@ export default function StudentSessionsPage() {
   const selectedSessionRef = useRef<TutorSession | null>(null);
   const currentUserRef = useRef<any>(null);
   const sessionsRef = useRef<TutorSession[]>([]);
-  const [isTutorTyping, setIsTutorTyping] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED' | 'OFFLINE'>('CONNECTING');
-  const [isTutorOnline, setIsTutorOnline] = useState(false);
+  const [isTutorOnlineBackup, setIsTutorOnlineBackup] = useState(false); // Deprecated
   const tutorOnlineRef = useRef(false);
   const typingTimeoutRef = useRef<any>(null);
+
+  // ─── Robust Presence System ──────────────────────────────────────
+  const { 
+    getRemoteStatus, 
+    emitTyping 
+  } = usePresence(currentUser?.id, selectedSession?.roomId || null);
+
+  const tutorState = selectedSession ? getRemoteStatus(selectedSession.id) : { status: 'offline', typing: false };
+  const isTutorOnline = tutorState.status !== 'offline';
+  const isTutorTyping = tutorState.typing;
+  const tutorStatus = tutorState.status;
+
+  const handleTyping = () => {
+    emitTyping(true);
+  };
 
   // ─── Report States ────────────────────────────────────────────────
   const [isReportingMode, setIsReportingMode] = useState(false);
@@ -252,13 +268,19 @@ export default function StudentSessionsPage() {
         .in('room_id', roomIds)
         .order('created_at', { ascending: true });
 
-      const sessionList: TutorSession[] = rooms.map((room: any) => {
+      const sessionList: TutorSession[] = await Promise.all(rooms.map(async (room: any) => {
         const tutorProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
         const name = tutorProfile?.full_name || 'Tutor';
         const avatar = tutorProfile?.avatar_url;
         const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
         const roomMessages = (allMessages || []).filter(m => m.room_id === room.id);
         const hasTutorResponse = roomMessages.some(m => m.sender_id === room.tutor_id);
+
+        const { data: presenceData } = await supabase
+          .from('profiles')
+          .select('online_status, last_seen')
+          .eq('id', room.tutor_id)
+          .single();
 
         const initiatingMsg = roomMessages.find(m => m.content.startsWith('SIGNAL INITIATED:'));
         const extractedSubject = initiatingMsg 
@@ -278,9 +300,11 @@ export default function StudentSessionsPage() {
           lastMsg: roomMessages[roomMessages.length - 1]?.content || 'Signal established...',
           lastActive: roomMessages[roomMessages.length - 1]?.created_at || room.created_at,
           hasUnread: unreadCount > 0,
+          onlineStatus: presenceData?.online_status as UserStatus || 'offline',
+          lastSeen: presenceData?.last_seen || null,
           scheduledClasses: roomSchedules,
         } as TutorSession;
-      });
+      }));
 
       setSessions(sessionList);
       if (sessionList.length > 0) setSelectedSession(sessionList[0]);
@@ -522,15 +546,7 @@ export default function StudentSessionsPage() {
         const state = channel.presenceState();
         const user = currentUserRef.current;
         const others = Object.values(state).flat() as any[];
-        const tutorOnline = others.some((u: any) => u.user_id !== user?.id);
-        setIsTutorOnline(tutorOnline);
-        tutorOnlineRef.current = tutorOnline;
-        if (tutorOnline) {
-          setMessages(prev => prev.map(m => m.sender === 'student' && m.status === 'sent' ? { ...m, status: 'delivered' as MessageStatus } : m));
-          setClassMessages(prev => prev.map(m => m.sender === 'student' && m.status === 'sent' ? { ...m, status: 'delivered' as MessageStatus } : m));
-        }
-        const otherTyping = others.some((u: any) => u.user_id !== user?.id && u.typing);
-        setIsTutorTyping(otherTyping);
+        // Note: Realtime status and typing is now handled by the usePresence hook
       })
       .subscribe(async (status) => {
         console.log(`[STUDENT REALTIME] Status: ${status} for Room: ${selectedSession?.roomId}`);
@@ -602,12 +618,9 @@ export default function StudentSessionsPage() {
       });
   }, [currentUser]);
 
-  const handleTyping = () => {
-    if (!channelRef.current) return;
-    channelRef.current.track({ user_id: currentUser?.id, typing: true, chat_active: true });
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      channelRef.current?.track({ user_id: currentUser?.id, typing: false, chat_active: true });
+      emitTyping(false);
     }, 2000);
   };
 
@@ -922,11 +935,18 @@ export default function StudentSessionsPage() {
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-sm font-black text-brand-dark uppercase italic leading-none">{selectedSession?.tutorName || 'No Tutor'}</p>
-                <div className={`w-1.5 h-1.5 rounded-full ${isTutorOnline ? 'bg-green-500 animate-pulse ring-4 ring-green-500/20' : 'bg-slate-300'}`} />
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  tutorStatus === 'online' ? 'bg-green-500 animate-pulse ring-4 ring-green-500/20' : 
+                  tutorStatus === 'idle' ? 'bg-amber-500 ring-4 ring-amber-500/20' : 'bg-slate-300'
+                }`} />
               </div>
               <div className="flex items-center gap-2 mt-1">
-                <p className={`text-[9px] font-bold uppercase tracking-widest ${isTutorOnline ? 'text-green-600' : 'text-slate-400'}`}>
-                  {isTutorOnline ? 'Online Now' : 'Offline'} — {selectedSession?.status === 'accepted' ? 'Engaged' : 'Pending'}
+                <p className={`text-[9px] font-bold uppercase tracking-widest ${
+                  tutorStatus === 'online' ? 'text-green-600' : 
+                  tutorStatus === 'idle' ? 'text-amber-600' : 'text-slate-400'
+                }`}>
+                  {tutorStatus === 'online' ? 'Online Now' : 
+                   tutorStatus === 'idle' ? 'Idle System' : 'Offline'} — {selectedSession?.status === 'accepted' ? 'Engaged' : 'Pending'}
                 </p>
               </div>
             </div>
