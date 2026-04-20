@@ -288,6 +288,23 @@ export default function StudentSessionsPage() {
           return [...prev, msg];
         });
       })
+      .on('broadcast', { event: 'new_message' }, (payload) => {
+        const m = payload.payload;
+        const sess = selectedSessionRef.current;
+        const user = currentUserRef.current;
+        if (!sess || m.room_id !== sess.roomId) return;
+        
+        setMessages(prev => {
+          if (prev.some(existing => existing.id === m.id)) return prev;
+          const msg: Message = {
+            id: m.id,
+            sender: m.sender_id === user?.id ? 'student' : 'tutor',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          return [...prev, msg];
+        });
+      })
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -298,6 +315,23 @@ export default function StudentSessionsPage() {
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess) return;
+        
+        setClassMessages(prev => {
+          if (prev.some(existing => existing.id === m.id)) return prev;
+          const msg: Message = {
+            id: m.id,
+            sender: m.sender_id === user?.id ? 'student' : 'tutor',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          return [...prev, msg];
+        });
+      })
+      .on('broadcast', { event: 'new_class_message' }, (payload) => {
+        const m = payload.payload;
+        const sess = selectedSessionRef.current;
+        const user = currentUserRef.current;
+        if (!sess || m.room_id !== sess.roomId) return;
         
         setClassMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
@@ -435,6 +469,15 @@ export default function StudentSessionsPage() {
       // Rollback optimistic update on failure
       setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
     } else if (data) {
+      // Direct Broadcast Fallback
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'new_message',
+          payload: data
+        });
+      }
+
       // Replace optimistic msg with confirmed DB record
       setMessages(prev => prev.map(m =>
         m.id === optimisticMsg.id
@@ -468,6 +511,15 @@ export default function StudentSessionsPage() {
       console.error("Signal Failed:", error.message);
       setClassMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
     } else if (data) {
+      // Direct Broadcast Fallback
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'new_class_message',
+          payload: data
+        });
+      }
+
       setClassMessages(prev => prev.map(m =>
         m.id === optimisticMsg.id
           ? { ...m, id: data.id }

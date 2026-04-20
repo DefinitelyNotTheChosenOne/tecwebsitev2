@@ -611,6 +611,15 @@ export default function SessionPage() {
         [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== (optimisticId as any))
       }));
     } else if (data) {
+      // Direct Broadcast Fallback: Send message directly through websocket in case Postgres replication lags
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'new_message',
+          payload: data
+        });
+      }
+      
       // Replace optimistic ID with real DB ID to prevent duplicates from realtime echo
       setAllDiscMsgs(prev => ({
         ...prev,
@@ -652,6 +661,15 @@ export default function SessionPage() {
         [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== (optimisticId as any))
       }));
     } else if (data) {
+      // Direct Broadcast Fallback
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'new_class_message',
+          payload: data
+        });
+      }
+
       setAllClassMsgs(prev => ({
         ...prev,
         [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => 
