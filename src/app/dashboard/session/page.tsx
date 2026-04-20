@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect, memo, useCallback } from 'react';
+import { useState, useRef, useEffect, memo, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { usePresence, UserStatus } from '@/hooks/usePresence';
@@ -214,6 +214,58 @@ export default function SessionPage() {
   const handleTyping = () => {
     emitTyping(true);
   };
+
+  // ─── Singleton Status IDs — Discussion Tab (Messenger-style) ───────────
+  const discLastMsgIsFromStudent = discMsgs.length > 0 && discMsgs[discMsgs.length - 1].sender === 'student';
+
+  const discLastSeenId = useMemo(() => {
+    for (let i = discMsgs.length - 1; i >= 0; i--) {
+      if (discMsgs[i].sender === 'tutor' && discMsgs[i].status === 'seen') return discMsgs[i].id;
+    }
+    return null;
+  }, [discMsgs]);
+
+  const discLastDeliveredId = useMemo(() => {
+    if (discLastMsgIsFromStudent || discLastSeenId) return null;
+    for (let i = discMsgs.length - 1; i >= 0; i--) {
+      if (discMsgs[i].sender === 'tutor' && discMsgs[i].status === 'delivered') return discMsgs[i].id;
+    }
+    return null;
+  }, [discMsgs, discLastSeenId, discLastMsgIsFromStudent]);
+
+  const discLastSentId = useMemo(() => {
+    if (discLastMsgIsFromStudent || discLastSeenId || discLastDeliveredId) return null;
+    for (let i = discMsgs.length - 1; i >= 0; i--) {
+      if (discMsgs[i].sender === 'tutor' && (discMsgs[i].status === 'sent' || discMsgs[i].status === 'sending')) return discMsgs[i].id;
+    }
+    return null;
+  }, [discMsgs, discLastSeenId, discLastDeliveredId, discLastMsgIsFromStudent]);
+
+  // ─── Singleton Status IDs — Class Tab (Messenger-style) ──────────────
+  const classLastMsgIsFromStudent = classMsgs.length > 0 && classMsgs[classMsgs.length - 1].sender === 'student';
+
+  const classLastSeenId = useMemo(() => {
+    for (let i = classMsgs.length - 1; i >= 0; i--) {
+      if (classMsgs[i].sender === 'tutor' && classMsgs[i].status === 'seen') return classMsgs[i].id;
+    }
+    return null;
+  }, [classMsgs]);
+
+  const classLastDeliveredId = useMemo(() => {
+    if (classLastMsgIsFromStudent || classLastSeenId) return null;
+    for (let i = classMsgs.length - 1; i >= 0; i--) {
+      if (classMsgs[i].sender === 'tutor' && classMsgs[i].status === 'delivered') return classMsgs[i].id;
+    }
+    return null;
+  }, [classMsgs, classLastSeenId, classLastMsgIsFromStudent]);
+
+  const classLastSentId = useMemo(() => {
+    if (classLastMsgIsFromStudent || classLastSeenId || classLastDeliveredId) return null;
+    for (let i = classMsgs.length - 1; i >= 0; i--) {
+      if (classMsgs[i].sender === 'tutor' && (classMsgs[i].status === 'sent' || classMsgs[i].status === 'sending')) return classMsgs[i].id;
+    }
+    return null;
+  }, [classMsgs, classLastSeenId, classLastDeliveredId, classLastMsgIsFromStudent]);
 
   const deleteSession = async (roomId: string, studentName: string) => {
     if (!confirm(`Are you sure you want to PERMANENTLY delete the mission with ${studentName}? This will be reflected on all your devices.`)) return;
@@ -802,30 +854,23 @@ export default function SessionPage() {
             ) : activeTab === 'discussion' ? (
               <motion.div key="discussion" className="h-full flex flex-col w-full px-8 md:px-12 pt-8 pb-4">
                 <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
-                  {(() => {
-                    const msgs = discMsgs;
-                    const lastMyMsgIdx = msgs.reduce((last, m, i) => m.sender === 'tutor' ? i : last, -1);
-                    const lastSeenIdx = msgs.reduce((last, m, i) => m.sender === 'tutor' && m.status === 'seen' ? i : last, -1);
-                    return msgs.map((m, i) => {
-                      let showStatus = false;
-                      if (m.sender === 'tutor') {
-                        if (m.status === 'seen') {
-                          showStatus = i === lastSeenIdx;
-                        } else if (m.status === 'sending' || m.status === 'sent' || m.status === 'delivered') {
-                          showStatus = i === lastMyMsgIdx && lastSeenIdx < i;
-                        }
-                      }
-                      return (
-                        <ChatBubble 
-                          key={m.id} 
-                          msg={m} 
-                          selectedStudent={selectedStudent} 
-                          onVisible={markAsRead} 
-                          showStatus={showStatus}
-                        />
-                      );
-                    });
-                  })()}
+                  {discMsgs.map(m => {
+                    let showStatus = false;
+                    if (m.sender === 'tutor') {
+                      if (m.id === discLastSeenId) showStatus = true;
+                      else if (m.id === discLastDeliveredId) showStatus = true;
+                      else if (m.id === discLastSentId) showStatus = true;
+                    }
+                    return (
+                      <ChatBubble 
+                        key={m.id} 
+                        msg={m} 
+                        selectedStudent={selectedStudent} 
+                        onVisible={markAsRead} 
+                        showStatus={showStatus}
+                      />
+                    );
+                  })}
                   <div ref={discBottomRef} />
                 </div>
                 <ChatInput value={discInput} onChange={(val: string) => { setDiscInput(val); handleTyping(); }} onSend={sendDiscMsg} placeholder="Negotiate timing..." />
@@ -842,30 +887,23 @@ export default function SessionPage() {
                 ) : (
                   <div className="h-full flex flex-col w-full px-8 md:px-12">
                     <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
-                      {(() => {
-                        const msgs = classMsgs;
-                        const lastMyMsgIdx = msgs.reduce((last, m, i) => m.sender === 'tutor' ? i : last, -1);
-                        const lastSeenIdx = msgs.reduce((last, m, i) => m.sender === 'tutor' && m.status === 'seen' ? i : last, -1);
-                        return msgs.map((m, i) => {
-                          let showStatus = false;
-                          if (m.sender === 'tutor') {
-                            if (m.status === 'seen') {
-                              showStatus = i === lastSeenIdx;
-                            } else if (m.status === 'sending' || m.status === 'sent' || m.status === 'delivered') {
-                              showStatus = i === lastMyMsgIdx && lastSeenIdx < i;
-                            }
-                          }
-                          return (
-                            <ChatBubble 
-                              key={m.id} 
-                              msg={m} 
-                              selectedStudent={selectedStudent} 
-                              onVisible={markClassAsRead} 
-                              showStatus={showStatus}
-                            />
-                          );
-                        });
-                      })()}
+                      {classMsgs.map(m => {
+                        let showStatus = false;
+                        if (m.sender === 'tutor') {
+                          if (m.id === classLastSeenId) showStatus = true;
+                          else if (m.id === classLastDeliveredId) showStatus = true;
+                          else if (m.id === classLastSentId) showStatus = true;
+                        }
+                        return (
+                          <ChatBubble 
+                            key={m.id} 
+                            msg={m} 
+                            selectedStudent={selectedStudent} 
+                            onVisible={markClassAsRead} 
+                            showStatus={showStatus}
+                          />
+                        );
+                      })}
                       <div ref={classBottomRef} />
                     </div>
                     <ChatInput value={classInput} onChange={(val: string) => { setClassInput(val); handleTyping(); }} onSend={sendClassMsg} placeholder="Execute live instruction..." />

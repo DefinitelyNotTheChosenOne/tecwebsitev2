@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect, memo, useCallback } from 'react';
+import { useState, useRef, useEffect, memo, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, Send, CalendarDays, Clock,
@@ -224,6 +224,35 @@ export default function StudentSessionsPage() {
   const handleTyping = () => {
     emitTyping(true);
   };
+
+  // ─── Singleton Status IDs (Messenger-style) ───────────────────────
+  // The "Reply Override": if the last message in the conversation is from
+  // the tutor (the other party), we hide all self-status icons entirely.
+  // This prevents a 'sent' checkmark from hanging around after they reply.
+  const lastMsgIsFromTutor = messages.length > 0 && messages[messages.length - 1].sender === 'tutor';
+
+  const lastSeenId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender === 'student' && messages[i].status === 'seen') return messages[i].id;
+    }
+    return null;
+  }, [messages]);
+
+  const lastDeliveredId = useMemo(() => {
+    if (lastMsgIsFromTutor || lastSeenId) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender === 'student' && messages[i].status === 'delivered') return messages[i].id;
+    }
+    return null;
+  }, [messages, lastSeenId, lastMsgIsFromTutor]);
+
+  const lastSentId = useMemo(() => {
+    if (lastMsgIsFromTutor || lastSeenId || lastDeliveredId) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender === 'student' && (messages[i].status === 'sent' || messages[i].status === 'sending')) return messages[i].id;
+    }
+    return null;
+  }, [messages, lastSeenId, lastDeliveredId, lastMsgIsFromTutor]);
 
   // ─── Report States ────────────────────────────────────────────────
   const [isReportingMode, setIsReportingMode] = useState(false);
@@ -1093,39 +1122,28 @@ export default function StudentSessionsPage() {
                        <p className="text-slate-300 font-black uppercase tracking-[3px] italic text-sm">Start the conversation...</p>
                      </div>
                   )}
-                  {(() => {
-                    const myMsgs = messages;
-                    // Index of last message sent by me (for sent/delivered icon)
-                    const lastMyMsgIdx = myMsgs.reduce((last, m, i) => m.sender === 'student' ? i : last, -1);
-                    // Index of highest-index message that is 'seen' (for the avatar jump)
-                    const lastSeenIdx = myMsgs.reduce((last, m, i) => m.sender === 'student' && m.status === 'seen' ? i : last, -1);
-                    return myMsgs.map((m, i) => {
-                      // Messenger rules:
-                      // - 'seen' avatar: only on the most recent seen message
-                      // - 'sending'/'sent'/'delivered': only on the very last sent message (if not yet seen)
-                      let showStatus = false;
-                      if (m.sender === 'student') {
-                        if (m.status === 'seen') {
-                          showStatus = i === lastSeenIdx;
-                        } else if (m.status === 'sending' || m.status === 'sent' || m.status === 'delivered') {
-                          showStatus = i === lastMyMsgIdx && lastSeenIdx < i;
-                        }
-                      }
-                      return (
-                        <ChatBubble 
-                          key={m.id} 
-                          msg={m} 
-                          tutorInitial={selectedSession?.tutorInitial || 'T'} 
-                          tutorAvatar={selectedSession?.tutorAvatar}
-                          isReportingMode={isReportingMode}
-                          isSelected={selectedMessages.includes(m.id)}
-                          toggleSelect={(id: string) => setSelectedMessages(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
-                          onVisible={markAsRead}
-                          showStatus={showStatus}
-                        />
-                      );
-                    });
-                  })()}
+                  {messages.map(m => {
+                    // Singleton Status: exactly one message shows any status icon at a time
+                    let showStatus = false;
+                    if (m.sender === 'student') {
+                      if (m.id === lastSeenId) showStatus = true;
+                      else if (m.id === lastDeliveredId) showStatus = true;
+                      else if (m.id === lastSentId) showStatus = true;
+                    }
+                    return (
+                      <ChatBubble 
+                        key={m.id} 
+                        msg={m} 
+                        tutorInitial={selectedSession?.tutorInitial || 'T'} 
+                        tutorAvatar={selectedSession?.tutorAvatar}
+                        isReportingMode={isReportingMode}
+                        isSelected={selectedMessages.includes(m.id)}
+                        toggleSelect={(id: string) => setSelectedMessages(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                        onVisible={markAsRead}
+                        showStatus={showStatus}
+                      />
+                    );
+                  })}
                   <div ref={msgBottomRef} />
                 </div>
                 
