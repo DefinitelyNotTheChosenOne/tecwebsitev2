@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, Send, MessageSquare, CalendarDays,
-  Clock, User, CheckCircle2, Zap, BookOpen,
+  Clock, User, CheckCircle2, Check, CheckCheck, Zap, BookOpen,
   Lock, AlertTriangle, Users, MessageCircle, Search,
   Filter, MoreVertical, Star, Shield, Wifi, X, Trash2
 } from 'lucide-react';
@@ -84,15 +84,11 @@ const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: {
     </div>
   );
   
-  // 2. Sent: A hollow circle with a blue outline (User is offline)
-  if (status === 'sent') return <div className="w-3.5 h-3.5 rounded-full border border-blue-500 shrink-0" />;
+  // 2. Sent: A single check icon (User is offline, but DB has it)
+  if (status === 'sent') return <Check className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
   
-  // 3. Delivered: A filled gray circle with a checkmark (User is online)
-  if (status === 'delivered') return (
-    <div className="w-3.5 h-3.5 rounded-full bg-slate-400 flex items-center justify-center shrink-0">
-      <CheckCircle2 className="w-2 h-2 text-white" strokeWidth={4} />
-    </div>
-  );
+  // 3. Delivered: A double check icon (User is online/socket active)
+  if (status === 'delivered') return <CheckCheck className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
   
   // 4. Seen: recipient's small circular profile avatar
   if (status === 'seen') return (

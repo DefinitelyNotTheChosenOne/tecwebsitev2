@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, Send, CalendarDays, Clock,
-  CheckCircle2, Zap, BookOpen, Lock, Users,
+  CheckCircle2, Check, CheckCheck, Zap, BookOpen, Lock, Users,
   MessageCircle, Search, Bell, ArrowRight,
   Timer, Wifi, Shield, X, History, RefreshCcw
 } from 'lucide-react';
@@ -79,15 +79,11 @@ const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: {
     </div>
   );
   
-  // 2. Sent: A hollow circle with a blue outline
-  if (status === 'sent') return <div className="w-3.5 h-3.5 rounded-full border border-blue-500 shrink-0" />;
+  // 2. Sent: A single check icon
+  if (status === 'sent') return <Check className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
   
-  // 3. Delivered: A filled gray circle with a checkmark
-  if (status === 'delivered') return (
-    <div className="w-3.5 h-3.5 rounded-full bg-slate-400 flex items-center justify-center shrink-0">
-      <CheckCircle2 className="w-2 h-2 text-white" strokeWidth={4} />
-    </div>
-  );
+  // 3. Delivered: A double check icon
+  if (status === 'delivered') return <CheckCheck className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
   
   // 4. Seen: recipient's avatar
   if (status === 'seen') return (
