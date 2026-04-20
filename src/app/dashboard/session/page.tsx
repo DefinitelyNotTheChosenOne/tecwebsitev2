@@ -137,6 +137,7 @@ export default function SessionPage() {
   const currentUserRef = useRef<any>(null);
   const studentsRef = useRef<StudentProfile[]>([]);
   const [isStudentTyping, setIsStudentTyping] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED' | 'OFFLINE'>('CONNECTING');
   const typingTimeoutRef = useRef<any>(null);
 
   const deleteSession = async (roomId: string, studentName: string) => {
@@ -409,16 +410,30 @@ export default function SessionPage() {
 
   useEffect(() => {
     if (!selectedStudent?.roomId) return;
+    // Smart merge: only add new messages, never replace (prevents duplicates from polling)
+    const mergeDiscMsgs = (fetched: Message[]) => {
+      setAllDiscMsgs(prev => {
+        const existing = prev[selectedStudent.id] || [];
+        const existingIds = new Set(existing.filter(m => !String(m.id).startsWith('opt-')).map(m => m.id));
+        const newOnes = fetched.filter(m => !existingIds.has(m.id));
+        if (newOnes.length === 0) return prev;
+        // Merge and sort by UUID (UUIDs are time-ordered in postgres)
+        const merged = [...existing.filter(m => String(m.id).startsWith('opt-')), ...fetched];
+        return { ...prev, [selectedStudent.id]: merged };
+      });
+    };
+
     const fetchMsgs = async () => {
-      // Discussion Messages
-      const { data: dData } = await supabase
+      const { data: dData, error: dErr } = await supabase
         .from('chat_messages')
         .select('*')
         .eq('room_id', selectedStudent.roomId)
         .order('created_at', { ascending: true });
 
+      if (dErr) console.error('[TUTOR POLL] chat_messages error:', dErr.message, dErr.code);
+
       if (dData) {
-        const mapped = dData
+        const mapped: Message[] = dData
           .filter((m: any) => !m.content.startsWith('SIGNAL INITIATED:') && !m.content.startsWith('SIGNAL ACCEPTED:') && !m.content.startsWith('SIGNAL REJECTED:'))
           .map((m: any) => ({
             id: m.id,
@@ -426,10 +441,9 @@ export default function SessionPage() {
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }));
-        setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: mapped }));
+        mergeDiscMsgs(mapped);
       }
 
-      // Live Class Messages
       const { data: cData } = await supabase
         .from('live_class_messages')
         .select('*')
@@ -437,16 +451,27 @@ export default function SessionPage() {
         .order('created_at', { ascending: true });
 
       if (cData) {
-        const mapped = cData.map((m: any) => ({
+        const mapped: Message[] = cData.map((m: any) => ({
           id: m.id,
           sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
           text: m.content,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
-        setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: mapped }));
+        setAllClassMsgs(prev => {
+          const existing = prev[selectedStudent.id] || [];
+          const existingIds = new Set(existing.filter(m => !String(m.id).startsWith('opt-')).map(m => m.id));
+          const newOnes = mapped.filter(m => !existingIds.has(m.id));
+          if (newOnes.length === 0) return prev;
+          return { ...prev, [selectedStudent.id]: [...existing.filter(m => String(m.id).startsWith('opt-')), ...mapped] };
+        });
       }
     };
+
+    // Initial fetch
     fetchMsgs();
+
+    // Polling fallback: fires every 2.5s to simulate realtime while RLS is being configured
+    const pollInterval = setInterval(fetchMsgs, 2500);
 
     const channel = supabase.channel(`session:${selectedStudent.roomId}`, {
       config: {
@@ -462,9 +487,11 @@ export default function SessionPage() {
         table: 'chat_messages'
       }, (payload) => {
         const m = payload.new as any;
+        console.log("[REALTIME] Incoming Message Row:", m);
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
-        if (!student || m.room_id !== student.roomId) return;
+        if (!student) { console.log("[REALTIME] Ignored: No student selected"); return; }
+        if (m.room_id !== student.roomId) { console.log("[REALTIME] Ignored: Room mismatch", m.room_id, student.roomId); return; }
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         setAllDiscMsgs(prev => {
           const studentMsgs = prev[student.id] || [];
@@ -540,13 +567,18 @@ export default function SessionPage() {
         setIsStudentTyping(otherTyping);
       })
       .subscribe(async (status) => {
+        console.log(`[REALTIME] Status change: ${status} for Room: ${selectedStudent.roomId}`);
         if (status === 'SUBSCRIBED') {
+          setConnectionStatus('CONNECTED');
           await channel.track({ user_id: currentUserRef.current?.id, typing: false });
+        } else {
+          setConnectionStatus('OFFLINE');
         }
       });
 
     return () => { 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      clearInterval(pollInterval);
       supabase.removeChannel(channel); 
       channelRef.current = null;
     };
@@ -803,13 +835,16 @@ export default function SessionPage() {
       <aside className={`fixed inset-y-0 left-0 z-50 w-72 md:w-80 bg-slate-50 border-r border-slate-100 flex flex-col transition-transform duration-300 md:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <ScrollStyles />
         <div className="p-8 pb-4">
-           <h2 className="text-xl font-black text-brand-dark uppercase italic tracking-tighter mb-8 flex items-center justify-between">
-              Students
+           <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-black text-brand-dark uppercase italic tracking-tighter flex items-center gap-2">
+                 Students
+                 <div className={`w-2 h-2 rounded-full ${connectionStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} title={connectionStatus}></div>
+              </h2>
               <div className="flex bg-white border border-slate-100 p-1 rounded-xl shadow-sm">
                 <button onClick={() => { setSidebarFilter('active'); }} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${sidebarFilter === 'active' ? 'bg-brand-primary text-brand-dark shadow-md' : 'text-slate-400 hover:text-brand-dark'}`}>Active</button>
                 <button onClick={() => { setSidebarFilter('past'); setActiveTab('class'); setSelectedStudent(null); }} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${sidebarFilter === 'past' ? 'bg-brand-primary text-brand-dark shadow-md' : 'text-slate-400 hover:text-brand-dark'}`}>Past</button>
               </div>
-           </h2>
+           </div>
            <div className="relative group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-brand-primary transition-colors" />
               <input type="text" placeholder="Search missions..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-100 py-3.5 pl-12 pr-6 rounded-2xl text-xs font-bold outline-none focus:border-brand-primary transition-all shadow-sm" />

@@ -129,6 +129,7 @@ export default function StudentSessionsPage() {
   const currentUserRef = useRef<any>(null);
   const sessionsRef = useRef<TutorSession[]>([]);
   const [isTutorTyping, setIsTutorTyping] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED' | 'OFFLINE'>('CONNECTING');
   const typingTimeoutRef = useRef<any>(null);
 
   // ─── Report States ────────────────────────────────────────────────
@@ -285,27 +286,39 @@ export default function StudentSessionsPage() {
   useEffect(() => {
     if (!selectedSession?.roomId || !currentUser) return;
 
+    // Smart merge: only add truly new messages, never wipe (prevents polling duplicates)
+    const mergeMsgs = (fetched: Message[], setter: React.Dispatch<React.SetStateAction<Message[]>>) => {
+      setter(prev => {
+        const existingIds = new Set(prev.filter(m => !String(m.id).startsWith('opt-')).map(m => m.id));
+        const newOnes = fetched.filter(m => !existingIds.has(m.id));
+        if (newOnes.length === 0) return prev;
+        return [...prev.filter(m => String(m.id).startsWith('opt-')), ...fetched];
+      });
+    };
+
     const fetchMsgs = async () => {
-      // Fetch Discussion Messages
-      const { data: dData } = await supabase
+      const { data: dData, error: dErr } = await supabase
         .from('chat_messages')
         .select('*')
         .eq('room_id', selectedSession.roomId)
         .order('created_at', { ascending: true });
 
+      if (dErr) console.error('[STUDENT POLL] chat_messages error:', dErr.message, dErr.code);
+
       if (dData) {
-        setMessages(dData
-          .filter((m: any) => !m.content.startsWith('SIGNAL INITIATED:') && !m.content.startsWith('SIGNAL ACCEPTED:') && !m.content.startsWith('SIGNAL REJECTED:'))
-          .map((m: any) => ({
-            id: m.id,
-            sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
-            text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }))
+        mergeMsgs(
+          dData
+            .filter((m: any) => !m.content.startsWith('SIGNAL INITIATED:') && !m.content.startsWith('SIGNAL ACCEPTED:') && !m.content.startsWith('SIGNAL REJECTED:'))
+            .map((m: any) => ({
+              id: m.id,
+              sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
+              text: m.content,
+              time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            })),
+          setMessages
         );
       }
 
-      // Fetch Live Class Messages
       const { data: cData } = await supabase
         .from('live_class_messages')
         .select('*')
@@ -313,15 +326,23 @@ export default function StudentSessionsPage() {
         .order('created_at', { ascending: true });
 
       if (cData) {
-        setClassMessages(cData.map((m: any) => ({
-          id: m.id,
-          sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
-          text: m.content,
-          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        })));
+        mergeMsgs(
+          cData.map((m: any) => ({
+            id: m.id,
+            sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          })),
+          setClassMessages
+        );
       }
     };
+
+    // Initial fetch
     fetchMsgs();
+
+    // Polling fallback: fires every 2.5s to simulate realtime while RLS is being configured
+    const pollInterval = setInterval(fetchMsgs, 2500);
 
     const channel = supabase.channel(`session:${selectedSession.roomId}`, {
       config: {
@@ -336,6 +357,7 @@ export default function StudentSessionsPage() {
         schema: 'public',
         table: 'chat_messages'
       }, (payload) => {
+        console.log("[STUDENT REALTIME] Incoming Message:", payload);
         const m = payload.new as any;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
@@ -415,13 +437,18 @@ export default function StudentSessionsPage() {
         setIsTutorTyping(otherTyping);
       })
       .subscribe(async (status) => {
+        console.log(`[STUDENT REALTIME] Status: ${status} for Room: ${selectedSession?.roomId}`);
         if (status === 'SUBSCRIBED') {
+          setConnectionStatus('CONNECTED');
           await channel.track({ user_id: currentUserRef.current?.id, typing: false });
+        } else {
+          setConnectionStatus('OFFLINE');
         }
       });
 
     return () => { 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      clearInterval(pollInterval);
       supabase.removeChannel(channel); 
       channelRef.current = null;
     };
@@ -636,12 +663,12 @@ export default function StudentSessionsPage() {
 
   // ─── Empty state ──────────────────────────────────────────────────
   if (sessions.length === 0) return (
-    <div className="h-screen bg-slate-50 flex flex-col items-center justify-center gap-6 font-sans">
+    <div className="h-screen bg-slate-50 flex flex-col items-center justify-center gap-6 font-sans text-center px-4">
       <ScrollStyles />
       <div className="w-24 h-24 bg-blue-50 rounded-[2rem] flex items-center justify-center">
         <MessageCircle className="w-10 h-10 text-blue-400" />
       </div>
-      <div className="text-center max-w-sm">
+      <div className="max-w-sm">
         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-brand-dark mb-2">No Active Sessions</h2>
         <p className="text-sm text-slate-400 font-medium leading-relaxed">You haven't connected with any tutors yet. Browse subjects or post a help request to get started.</p>
       </div>
@@ -667,7 +694,10 @@ export default function StudentSessionsPage() {
       }`}>
         <div className="p-5 md:p-6">
           <div className="flex items-center justify-between mb-5">
-            <h1 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-brand-dark">My Sessions</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-brand-dark">My Sessions</h1>
+              <div className={`w-2 h-2 rounded-full ${connectionStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} title={connectionStatus}></div>
+            </div>
             <div className="flex items-center gap-2">
               <Link href="/dashboard" className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">
                 <ChevronLeft className="w-4 h-4 text-slate-500" />
