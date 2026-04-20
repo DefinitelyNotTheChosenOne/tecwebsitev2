@@ -69,20 +69,33 @@ type Tab = 'discussion' | 'schedule' | 'class';
 const MAX_CLASSES = 5;
 
 // ─── Message Status Icon ────────────────────────────────────────────────
-const MessageStatusIcon = ({ status, recipientInitial }: { status?: MessageStatus; recipientInitial?: string }) => {
+const MessageStatusIcon = ({ status, recipientInitial, recipientAvatar }: { status?: MessageStatus; recipientInitial?: string, recipientAvatar?: string }) => {
   if (!status) return null;
-  if (status === 'sending') return <div className="w-3 h-3 rounded-full border-2 border-slate-300/60 shrink-0" />;
-  if (status === 'sent')     return <div className="w-3 h-3 rounded-full border-2 border-blue-400 shrink-0" />;
+  
+  // 1. Sending: A hollow, light-gray circle
+  if (status === 'sending') return <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0" />;
+  
+  // 2. Sent: A hollow circle with a blue outline (User is offline)
+  if (status === 'sent') return <div className="w-3.5 h-3.5 rounded-full border border-blue-500 shrink-0" />;
+  
+  // 3. Delivered: A filled gray circle with a checkmark (User is online)
   if (status === 'delivered') return (
-    <div className="w-3 h-3 rounded-full bg-slate-400 flex items-center justify-center shrink-0">
-      <svg className="w-1.5 h-1.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+    <div className="w-3.5 h-3.5 rounded-full bg-slate-400 flex items-center justify-center shrink-0">
+      <CheckCircle2 className="w-2 h-2 text-white" strokeWidth={4} />
     </div>
   );
+  
+  // 4. Seen: recipient's small circular profile avatar
   if (status === 'seen') return (
-    <div className="w-3.5 h-3.5 rounded-full bg-blue-500 flex items-center justify-center text-[7px] font-black text-white shrink-0">
-      {(recipientInitial || 'S').charAt(0)}
+    <div className="w-4 h-4 rounded-full bg-brand-primary overflow-hidden flex items-center justify-center shrink-0 shadow-sm ring-1 ring-white">
+      {recipientAvatar ? (
+        <img src={recipientAvatar} className="w-full h-full object-cover" alt="" />
+      ) : (
+        <span className="text-[7px] font-black text-brand-dark">{(recipientInitial || 'S').charAt(0)}</span>
+      )}
     </div>
   );
+  
   return null;
 };
 
@@ -161,6 +174,7 @@ export default function SessionPage() {
   const [isStudentTyping, setIsStudentTyping] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED' | 'OFFLINE'>('CONNECTING');
   const [isStudentOnline, setIsStudentOnline] = useState(false);
+  const studentOnlineRef = useRef(false);
   const typingTimeoutRef = useRef<any>(null);
 
   const deleteSession = async (roomId: string, studentName: string) => {
@@ -506,24 +520,28 @@ export default function SessionPage() {
 
     channel
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-        const m = payload.new as any;
         console.log("[REALTIME] Incoming Message Row:", m);
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
-        if (!student) { console.log("[REALTIME] Ignored: No student selected"); return; }
-        if (m.room_id !== student.roomId) { console.log("[REALTIME] Ignored: Room mismatch", m.room_id, student.roomId); return; }
+        if (!student) return;
+        if (m.room_id !== student.roomId) return;
+        
+        // ── Auto-update Delivered Status in DB ───────────────────────
+        if (m.sender_id !== user?.id && !m.delivered_at) {
+          supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+        }
+
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         setAllDiscMsgs(prev => {
           const studentMsgs = prev[student.id] || [];
           if (studentMsgs.some(existing => existing.id === m.id)) return prev;
-          const msg: Message = {
+          return { ...prev, [student.id]: [...studentMsgs, {
             id: m.id,
             sender: m.sender_id === user?.id ? 'tutor' : 'student',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === user?.id ? 'sent' : undefined
-          };
-          return { ...prev, [student.id]: [...studentMsgs, msg] };
+            status: m.sender_id === user?.id ? (studentOnlineRef.current ? 'delivered' : 'sent') : undefined
+          }] };
         });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload) => {
@@ -600,6 +618,7 @@ export default function SessionPage() {
         const others = Object.values(state).flat() as any[];
         const studentOnline = others.some((u: any) => u.user_id !== user?.id);
         setIsStudentOnline(studentOnline);
+        studentOnlineRef.current = studentOnline;
         if (studentOnline) {
           const student = selectedStudentRef.current;
           if (student) {
