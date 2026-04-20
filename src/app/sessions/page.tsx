@@ -323,7 +323,11 @@ export default function StudentSessionsPage() {
     };
     fetchMsgs();
 
-    const channel = supabase.channel(`session:${selectedSession.roomId}`);
+    const channel = supabase.channel(`session:${selectedSession.roomId}`, {
+      config: {
+        broadcast: { ack: true },
+      },
+    });
     channelRef.current = channel;
 
     channel
