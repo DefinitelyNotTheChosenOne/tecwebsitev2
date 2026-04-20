@@ -426,7 +426,18 @@ export default function SessionPage() {
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }));
-        setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: mapped }));
+        // MERGE with existing (don't replace — preserves optimistic messages during re-fetches)
+        setAllDiscMsgs(prev => {
+          const existing = prev[selectedStudent.id] || [];
+          const existingIds = new Set(existing.map(m => m.id));
+          const newOnes = mapped.filter((m: any) => !existingIds.has(m.id));
+          if (newOnes.length === 0) return prev;
+          const merged = [...existing, ...newOnes].sort((a: any, b: any) => {
+            // Sort by time string as fallback
+            return a.id < b.id ? -1 : 1;
+          });
+          return { ...prev, [selectedStudent.id]: merged };
+        });
       }
 
       // Live Class Messages
@@ -443,7 +454,14 @@ export default function SessionPage() {
           text: m.content,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
-        setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: mapped }));
+        // MERGE pattern for class messages too
+        setAllClassMsgs(prev => {
+          const existing = prev[selectedStudent.id] || [];
+          const existingIds = new Set(existing.map(m => m.id));
+          const newOnes = mapped.filter((m: any) => !existingIds.has(m.id));
+          if (newOnes.length === 0) return prev;
+          return { ...prev, [selectedStudent.id]: [...existing, ...newOnes] };
+        });
       }
     };
     fetchMsgs();
@@ -550,7 +568,7 @@ export default function SessionPage() {
       supabase.removeChannel(channel); 
       channelRef.current = null;
     };
-  }, [selectedStudent, currentUser]);
+  }, [selectedStudent?.roomId]);  // Only re-run when the actual room changes, NOT on every render
 
   const handleTyping = () => {
     if (!channelRef.current) return;
