@@ -224,11 +224,12 @@ export default function SessionPage() {
   const discLastMsgIsFromStudent = discMsgs.length > 0 && discMsgs[discMsgs.length - 1].sender === 'student';
 
   const discLastSeenId = useMemo(() => {
+    if (discLastMsgIsFromStudent) return null;
     for (let i = discMsgs.length - 1; i >= 0; i--) {
       if (discMsgs[i].sender === 'tutor' && discMsgs[i].status === 'seen') return discMsgs[i].id;
     }
     return null;
-  }, [discMsgs]);
+  }, [discMsgs, discLastMsgIsFromStudent]);
 
   const discLastDeliveredId = useMemo(() => {
     if (discLastMsgIsFromStudent || discLastSeenId) return null;
@@ -250,11 +251,12 @@ export default function SessionPage() {
   const classLastMsgIsFromStudent = classMsgs.length > 0 && classMsgs[classMsgs.length - 1].sender === 'student';
 
   const classLastSeenId = useMemo(() => {
+    if (classLastMsgIsFromStudent) return null;
     for (let i = classMsgs.length - 1; i >= 0; i--) {
       if (classMsgs[i].sender === 'tutor' && classMsgs[i].status === 'seen') return classMsgs[i].id;
     }
     return null;
-  }, [classMsgs]);
+  }, [classMsgs, classLastMsgIsFromStudent]);
 
   const classLastDeliveredId = useMemo(() => {
     if (classLastMsgIsFromStudent || classLastSeenId) return null;
@@ -494,6 +496,29 @@ export default function SessionPage() {
     return () => { supabase.removeChannel(globalChannel); globalWatchChannelRef.current = null; };
   }, [currentUser]);
 
+  // ─── Automatic Read Triggers ──────────────────────────
+  useEffect(() => {
+    if (activeTab === 'discussion' && selectedStudent?.roomId) {
+      supabase.from('chat_messages')
+        .update({ status: 'seen' })
+        .eq('room_id', selectedStudent.roomId)
+        .neq('sender_id', currentUser?.id)
+        .neq('status', 'seen')
+        .then();
+    }
+  }, [activeTab, selectedStudent?.roomId, currentUser?.id, discMsgs]);
+
+  useEffect(() => {
+    if (activeTab === 'class' && selectedStudent?.roomId) {
+      supabase.from('live_class_messages')
+        .update({ status: 'seen' })
+        .eq('room_id', selectedStudent.roomId)
+        .neq('sender_id', currentUser?.id)
+        .neq('status', 'seen')
+        .then();
+    }
+  }, [activeTab, selectedStudent?.roomId, currentUser?.id, classMsgs]);
+
   useEffect(() => {
     if (!selectedStudent?.roomId) return;
     const mergeDiscMsgs = (fetched: Message[]) => {
@@ -522,7 +547,7 @@ export default function SessionPage() {
             sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === currentUser?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent') as MessageStatus : undefined
+            status: m.sender_id === currentUser?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) as MessageStatus : undefined
           }));
         mergeDiscMsgs(mapped);
       }
@@ -534,7 +559,7 @@ export default function SessionPage() {
           sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
           text: m.content,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: m.sender_id === currentUser?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent') as MessageStatus : undefined
+          status: m.sender_id === currentUser?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) as MessageStatus : undefined
         }));
         setAllClassMsgs(prev => {
           const existing = prev[selectedStudent.id] || [];
@@ -567,7 +592,7 @@ export default function SessionPage() {
         const user = currentUserRef.current;
         if (!student || m.room_id !== student.roomId) return;
         
-        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent') : undefined;
+        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) : undefined;
 
         if (type === 'INSERT') {
           if (m.sender_id !== user?.id && !m.delivered_at) supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
@@ -597,7 +622,7 @@ export default function SessionPage() {
         const user = currentUserRef.current;
         if (!student || m.room_id !== student.roomId) return;
         
-        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent') : undefined;
+        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) : undefined;
 
         if (type === 'INSERT') {
           if (m.sender_id !== user?.id && !m.delivered_at) supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();

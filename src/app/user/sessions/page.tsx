@@ -246,11 +246,12 @@ export default function StudentSessionsPage() {
   const lastMsgIsFromTutor = messages.length > 0 && messages[messages.length - 1].sender === 'tutor';
 
   const lastSeenId = useMemo(() => {
+    if (lastMsgIsFromTutor) return null;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].sender === 'student' && messages[i].status === 'seen') return messages[i].id;
     }
     return null;
-  }, [messages]);
+  }, [messages, lastMsgIsFromTutor]);
 
   const lastDeliveredId = useMemo(() => {
     if (lastMsgIsFromTutor || lastSeenId) return null;
@@ -439,6 +440,29 @@ export default function StudentSessionsPage() {
     };
   }, [currentUser]);
 
+  // ─── Automatic Read Triggers ──────────────────────────
+  useEffect(() => {
+    if (activeTab === 'discussion' && selectedSession?.roomId) {
+      supabase.from('chat_messages')
+        .update({ status: 'seen' })
+        .eq('room_id', selectedSession.roomId)
+        .neq('sender_id', currentUser?.id)
+        .neq('status', 'seen')
+        .then();
+    }
+  }, [activeTab, selectedSession?.roomId, currentUser?.id, messages]);
+
+  useEffect(() => {
+    if (activeTab === 'class' && selectedSession?.roomId) {
+      supabase.from('live_class_messages')
+        .update({ status: 'seen' })
+        .eq('room_id', selectedSession.roomId)
+        .neq('sender_id', currentUser?.id)
+        .neq('status', 'seen')
+        .then();
+    }
+  }, [activeTab, selectedSession?.roomId, currentUser?.id, classMessages]);
+
   // ─── Fetch messages for selected session ──────────────────────────
   useEffect(() => {
     if (!selectedSession?.roomId || !currentUser) return;
@@ -475,7 +499,7 @@ export default function StudentSessionsPage() {
               text: m.content,
               time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               status: m.sender_id === currentUser.id
-                ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent') as MessageStatus
+                ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) as MessageStatus
                 : undefined
             })),
           setMessages
@@ -496,7 +520,7 @@ export default function StudentSessionsPage() {
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             status: m.sender_id === currentUser.id
-              ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent') as MessageStatus
+              ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) as MessageStatus
               : undefined
           })),
           setClassMessages
@@ -541,7 +565,7 @@ export default function StudentSessionsPage() {
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
         if (m.sender_id !== user?.id) return; // only care about OUR messages being updated
-        const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent';
+        const status: MessageStatus = m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent');
         setMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
       .on('broadcast', { event: 'new_message' }, (payload: { payload: any }) => {
@@ -571,7 +595,7 @@ export default function StudentSessionsPage() {
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
         if (m.sender_id !== user?.id) return;
-        const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent';
+        const status: MessageStatus = m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent');
         setClassMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
       .on('broadcast', { event: 'new_class_message' }, (payload: { payload: any }) => {
