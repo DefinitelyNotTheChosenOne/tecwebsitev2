@@ -294,21 +294,15 @@ export default function StudentSessionsPage() {
         .order('created_at', { ascending: true });
 
       if (dData) {
-        const mapped = dData
+        setMessages(dData
           .filter((m: any) => !m.content.startsWith('SIGNAL INITIATED:') && !m.content.startsWith('SIGNAL ACCEPTED:') && !m.content.startsWith('SIGNAL REJECTED:'))
           .map((m: any) => ({
             id: m.id,
             sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }));
-        // MERGE with existing — don't replace (prevents optimistic message wipe)
-        setMessages(prev => {
-          const existingIds = new Set(prev.map(m => m.id));
-          const newOnes = mapped.filter((m: any) => !existingIds.has(m.id));
-          if (newOnes.length === 0) return prev;
-          return [...prev, ...newOnes].sort((a: any, b: any) => a.id < b.id ? -1 : 1);
-        });
+          }))
+        );
       }
 
       // Fetch Live Class Messages
@@ -319,18 +313,12 @@ export default function StudentSessionsPage() {
         .order('created_at', { ascending: true });
 
       if (cData) {
-        const mapped = cData.map((m: any) => ({
+        setClassMessages(cData.map((m: any) => ({
           id: m.id,
           sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
           text: m.content,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }));
-        setClassMessages(prev => {
-          const existingIds = new Set(prev.map(m => m.id));
-          const newOnes = mapped.filter((m: any) => !existingIds.has(m.id));
-          if (newOnes.length === 0) return prev;
-          return [...prev, ...newOnes];
-        });
+        })));
       }
     };
     fetchMsgs();

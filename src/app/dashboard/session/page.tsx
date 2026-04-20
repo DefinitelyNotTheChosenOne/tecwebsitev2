@@ -426,18 +426,7 @@ export default function SessionPage() {
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }));
-        // MERGE with existing (don't replace — preserves optimistic messages during re-fetches)
-        setAllDiscMsgs(prev => {
-          const existing = prev[selectedStudent.id] || [];
-          const existingIds = new Set(existing.map(m => m.id));
-          const newOnes = mapped.filter((m: any) => !existingIds.has(m.id));
-          if (newOnes.length === 0) return prev;
-          const merged = [...existing, ...newOnes].sort((a: any, b: any) => {
-            // Sort by time string as fallback
-            return a.id < b.id ? -1 : 1;
-          });
-          return { ...prev, [selectedStudent.id]: merged };
-        });
+        setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: mapped }));
       }
 
       // Live Class Messages
@@ -454,14 +443,7 @@ export default function SessionPage() {
           text: m.content,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
-        // MERGE pattern for class messages too
-        setAllClassMsgs(prev => {
-          const existing = prev[selectedStudent.id] || [];
-          const existingIds = new Set(existing.map(m => m.id));
-          const newOnes = mapped.filter((m: any) => !existingIds.has(m.id));
-          if (newOnes.length === 0) return prev;
-          return { ...prev, [selectedStudent.id]: [...existing, ...newOnes] };
-        });
+        setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: mapped }));
       }
     };
     fetchMsgs();
