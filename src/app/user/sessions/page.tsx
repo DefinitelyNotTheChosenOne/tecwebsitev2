@@ -549,6 +549,7 @@ export default function StudentSessionsPage() {
         // Auto-mark as delivered if we're the receiver
         if (m.sender_id !== user?.id && !m.delivered_at) {
           supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: sess.roomId, msgId: m.id } });
         }
 
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
@@ -584,6 +585,10 @@ export default function StudentSessionsPage() {
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
+        if (m.sender_id !== user?.id && !m.delivered_at) {
+           supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+           if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: sess.roomId, msgId: m.id } });
+        }
         setClassMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
           return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: m.sender_id === user?.id ? 'sent' : undefined } as Message];
@@ -623,6 +628,13 @@ export default function StudentSessionsPage() {
         const user = currentUserRef.current;
         const others = Object.values(state).flat() as any[];
         // Note: Realtime status and typing is now handled by the usePresence hook
+      })
+      .on('broadcast', { event: 'message_delivered' }, ({ payload }: { payload: any }) => {
+        const sess = selectedSessionRef.current;
+        if (!sess || payload.roomId !== sess.roomId) return;
+        const { msgId } = payload;
+        setMessages(prev => prev.map(m => (m.id === msgId && m.sender === 'student' && m.status === 'sent') ? { ...m, status: 'delivered' as MessageStatus } : m));
+        setClassMessages(prev => prev.map(m => (m.id === msgId && m.sender === 'student' && m.status === 'sent') ? { ...m, status: 'delivered' as MessageStatus } : m));
       })
       .subscribe();
 
@@ -791,7 +803,9 @@ export default function StudentSessionsPage() {
         .eq('room_id', selectedSession.roomId)
         .neq('sender_id', currentUser.id)
         .is('read_at', null)
-        .then();
+        .then(() => {
+          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
+        });
 
       const finalStatus: MessageStatus = isTutorOnline ? 'delivered' : 'sent';
       setMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: data.id, status: finalStatus } : m));
@@ -833,7 +847,9 @@ export default function StudentSessionsPage() {
         .eq('room_id', selectedSession.roomId)
         .neq('sender_id', currentUser.id)
         .is('read_at', null)
-        .then();
+        .then(() => {
+          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
+        });
 
       const finalStatus: MessageStatus = isTutorOnline ? 'delivered' : 'sent';
       setClassMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: data.id, status: finalStatus } : m));

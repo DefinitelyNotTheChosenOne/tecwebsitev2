@@ -595,7 +595,10 @@ export default function SessionPage() {
         const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) : undefined;
 
         if (type === 'INSERT') {
-          if (m.sender_id !== user?.id && !m.delivered_at) supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+          if (m.sender_id !== user?.id && !m.delivered_at) {
+             supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+             if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: student.roomId, msgId: m.id } });
+          }
           if (m.content.startsWith('SIGNAL') || m.content.startsWith('Discussion Started')) return;
           
           setAllDiscMsgs(prev => {
@@ -625,7 +628,10 @@ export default function SessionPage() {
         const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.status || (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent')) : undefined;
 
         if (type === 'INSERT') {
-          if (m.sender_id !== user?.id && !m.delivered_at) supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+          if (m.sender_id !== user?.id && !m.delivered_at) {
+             supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+             if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: student.roomId, msgId: m.id } });
+          }
           setAllClassMsgs(prev => {
             const studentMsgs = prev[student.id] || [];
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
@@ -642,6 +648,33 @@ export default function SessionPage() {
             return { ...prev, [student.id]: studentMsgs.map(old => old.id === m.id ? { ...old, status } : old) };
           });
         }
+      })
+      .on('broadcast', { event: 'messages_read' }, ({ payload }: { payload: any }) => {
+        const student = selectedStudentRef.current;
+        if (!student || payload.roomId !== student.roomId) return;
+
+        const { msgId } = payload;
+        setAllDiscMsgs(prev => ({
+          ...prev,
+          [student.id]: (prev[student.id] || []).map(m => (m.id === msgId || !msgId) && m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m)
+        }));
+        setAllClassMsgs(prev => ({
+          ...prev,
+          [student.id]: (prev[student.id] || []).map(m => (m.id === msgId || !msgId) && m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m)
+        }));
+      })
+      .on('broadcast', { event: 'message_delivered' }, ({ payload }: { payload: any }) => {
+        const student = selectedStudentRef.current;
+        if (!student || payload.roomId !== student.roomId) return;
+        const { msgId } = payload;
+        setAllDiscMsgs(prev => ({
+          ...prev,
+          [student.id]: (prev[student.id] || []).map(m => (m.id === msgId && m.sender === 'tutor' && m.status === 'sent') ? { ...m, status: 'delivered' as MessageStatus } : m)
+        }));
+        setAllClassMsgs(prev => ({
+          ...prev,
+          [student.id]: (prev[student.id] || []).map(m => (m.id === msgId && m.sender === 'tutor' && m.status === 'sent') ? { ...m, status: 'delivered' as MessageStatus } : m)
+        }));
       })
       .subscribe();
 
@@ -669,13 +702,17 @@ export default function SessionPage() {
   const markAsRead = useCallback((msgId: string | number) => {
     const student = selectedStudentRef.current;
     if (!student || !currentUser) return;
-    supabase.from('chat_messages').update({ read_at: new Date().toISOString() }).eq('id', msgId).eq('room_id', student.roomId).then();
+    supabase.from('chat_messages').update({ read_at: new Date().toISOString() }).eq('id', msgId).eq('room_id', student.roomId).then(() => {
+      channelRef.current?.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: student.roomId, msgId } });
+    });
   }, [currentUser]);
 
   const markClassAsRead = useCallback((msgId: string | number) => {
     const student = selectedStudentRef.current;
     if (!student || !currentUser) return;
-    supabase.from('live_class_messages').update({ read_at: new Date().toISOString() }).eq('id', msgId).eq('room_id', student.roomId).then();
+    supabase.from('live_class_messages').update({ read_at: new Date().toISOString() }).eq('id', msgId).eq('room_id', student.roomId).then(() => {
+      channelRef.current?.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: student.roomId, msgId } });
+    });
   }, [currentUser]);
 
   useEffect(() => {
@@ -749,7 +786,10 @@ export default function SessionPage() {
     setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), { id: optimisticId, sender: 'tutor', text: content, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'sending' }] }));
     const { data } = await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser.id, content }).select().single();
     if (data) {
-      if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
+      if (channelRef.current) {
+        channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
+        channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
+      }
       setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: studentStatus === 'online' ? 'delivered' : 'sent' } : m) }));
     }
   };
@@ -762,7 +802,10 @@ export default function SessionPage() {
     setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), { id: optimisticId, sender: 'tutor', text: content, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'sending' }] }));
     const { data } = await supabase.from('live_class_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser.id, content }).select().single();
     if (data) {
-      if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
+      if (channelRef.current) {
+        channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
+        channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
+      }
       setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: studentStatus === 'online' ? 'delivered' : 'sent' } : m) }));
     }
   };
