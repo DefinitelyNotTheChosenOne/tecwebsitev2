@@ -211,6 +211,7 @@ export default function StudentSessionsPage() {
 
   // ─── Robust Presence System ──────────────────────────────────────
   const { 
+    onlineStatus,
     getRemoteStatus, 
     emitTyping 
   } = usePresence(currentUser?.id, selectedSession?.roomId || null);
@@ -272,7 +273,7 @@ export default function StudentSessionsPage() {
       // Check which rooms have signals to extract subjects
       const { data: allMessages } = await supabase
         .from('chat_messages')
-        .select('room_id, sender_id, content, created_at')
+        .select('room_id, sender_id, content, created_at, read_at')
         .in('room_id', roomIds)
         .order('created_at', { ascending: true });
 
@@ -295,7 +296,7 @@ export default function StudentSessionsPage() {
           ? initiatingMsg.content.match(/requesting a (.+) session/)?.[1] || 'General Session'
           : 'General Session';
 
-        const unreadCount = roomMessages.filter(m => m.sender_id === room.tutor_id && !m.read_at).length;
+        const unreadCount = roomMessages.filter((m: any) => m.sender_id === room.tutor_id && !m.read_at).length;
 
         return {
           id: room.tutor_id,
@@ -549,26 +550,15 @@ export default function StudentSessionsPage() {
         setMessages(prev => prev.map(m => (m.id === msgId || !msgId) && m.sender === 'student' ? { ...m, status: 'seen' as MessageStatus } : m));
         setClassMessages(prev => prev.map(m => (m.id === msgId || !msgId) && m.sender === 'student' ? { ...m, status: 'seen' as MessageStatus } : m));
       })
-      // ── Presence: detect if tutor is online → upgrade to Delivered ───
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const user = currentUserRef.current;
         const others = Object.values(state).flat() as any[];
         // Note: Realtime status and typing is now handled by the usePresence hook
       })
-      .subscribe(async (status) => {
-        console.log(`[STUDENT REALTIME] Status: ${status} for Room: ${selectedSession?.roomId}`);
-        if (status === 'SUBSCRIBED') {
-          setConnectionStatus('CONNECTED');
-          await channel.track({ user_id: currentUserRef.current?.id, typing: false, chat_active: true });
-        } else {
-          setConnectionStatus('OFFLINE');
-        }
-      });
+      .subscribe();
 
     return () => {
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      clearInterval(pollInterval);
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
@@ -859,7 +849,7 @@ export default function StudentSessionsPage() {
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <h1 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-brand-dark">My Sessions</h1>
-              <div className={`w-2 h-2 rounded-full ${connectionStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} title={connectionStatus}></div>
+              <div className={`w-2 h-2 rounded-full ${onlineStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} title={`System: ${onlineStatus}`}></div>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/dashboard" className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">

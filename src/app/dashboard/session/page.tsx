@@ -6,8 +6,10 @@ import { usePresence, UserStatus } from '@/hooks/usePresence';
 import { 
   Users, CalendarDays, History, BookOpen, Clock, 
   CheckCircle2, Search, MessageCircle, 
-  Send, Bell, Filter, MoreVertical, X, Check, CheckCheck, Zap
+  Send, Bell, Filter, MoreVertical, X, Check, CheckCheck, Zap, User,
+  Trash2, Lock
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 // ─── Custom scrollbar ───────────────────────────────────────────────────
@@ -73,7 +75,6 @@ const MAX_CLASSES = 5;
 const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: { status?: MessageStatus; recipientInitial?: string, recipientAvatar?: string }) => {
   if (!status) return null;
   
-  // 1. Sending: A hollow, light-gray circle
   if (status === 'sending') return (
     <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0 relative overflow-hidden">
       <motion.div 
@@ -84,13 +85,8 @@ const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: {
     </div>
   );
   
-  // 2. Sent: A single check icon (User is offline, but DB has it)
   if (status === 'sent') return <Check className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
-  
-  // 3. Delivered: A double check icon (User is online/socket active)
   if (status === 'delivered') return <CheckCheck className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
-  
-  // 4. Seen: recipient's small circular profile avatar
   if (status === 'seen') return (
     <motion.div 
       layoutId="seen-avatar"
@@ -201,16 +197,16 @@ export default function SessionPage() {
   const selectedStudentRef = useRef<StudentProfile | null>(null);
   const currentUserRef = useRef<any>(null);
   const studentsRef = useRef<StudentProfile[]>([]);
-  const [isStudentOnlineBackup, setIsStudentOnlineBackup] = useState(false); // Deprecated but kept for transition
   const typingTimeoutRef = useRef<any>(null);
 
   // ─── Robust Presence System ──────────────────────────────────────
   const { 
+    onlineStatus,
     getRemoteStatus, 
     emitTyping 
   } = usePresence(currentUser?.id, selectedStudent?.roomId || null);
 
-  const studentState = selectedStudent ? getRemoteStatus(selectedStudent.id) : { status: 'offline', typing: false };
+  const studentState = selectedStudent ? getRemoteStatus(selectedStudent.id) : { status: 'offline' as UserStatus, typing: false };
   const isStudentOnline = studentState.status !== 'offline';
   const isStudentTyping = studentState.typing;
   const studentStatus = studentState.status;
@@ -509,7 +505,6 @@ export default function SessionPage() {
             const studentMsgs = prev[student.id] || [];
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
             
-            // ── Implicit Read Receipt: Student replied, so they saw previous tutoring messages ──
             const list = m.sender_id !== user?.id 
               ? studentMsgs.map(old => old.sender === 'tutor' ? { ...old, status: 'seen' as MessageStatus } : old)
               : studentMsgs;
@@ -538,7 +533,6 @@ export default function SessionPage() {
             const studentMsgs = prev[student.id] || [];
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
 
-            // ── Implicit Read Receipt: Student replied, so they saw previous tutoring messages ──
             const list = m.sender_id !== user?.id 
               ? studentMsgs.map(old => old.sender === 'tutor' ? { ...old, status: 'seen' as MessageStatus } : old)
               : studentMsgs;
@@ -552,27 +546,18 @@ export default function SessionPage() {
           });
         }
       })
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const user = currentUserRef.current;
-        const others = Object.values(state).flat() as any[];
-        const studentOnline = others.some((u: any) => u.user_id !== user?.id);
-        setIsStudentOnline(studentOnline);
-      })
       .subscribe();
 
     return () => {
-      clearInterval(pollInterval);
       supabase.removeChannel(channel);
       channelRef.current = null;
+      clearInterval(pollInterval);
     };
   }, [selectedStudent?.roomId, currentUser?.id]);
 
-  // ── Mark messages as read when Specialist opens the Discussion tab ──────
   useEffect(() => {
     if (activeTab !== 'discussion' || !selectedStudent?.roomId || !currentUser?.id) return;
     
-    // Clear sidebar unread dot instantly
     setStudents(prev => prev.map(s => s.roomId === selectedStudent.roomId ? { ...s, hasUnread: false } : s));
 
     supabase
@@ -595,14 +580,6 @@ export default function SessionPage() {
     if (!student || !currentUser) return;
     supabase.from('live_class_messages').update({ read_at: new Date().toISOString() }).eq('id', msgId).eq('room_id', student.roomId).then();
   }, [currentUser]);
-
-  const handleTyping = () => {
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (channelRef.current) channelRef.current.track({ user_id: currentUser?.id, typing: true, chat_active: true });
-    typingTimeoutRef.current = setTimeout(() => {
-      if (channelRef.current) channelRef.current.track({ user_id: currentUser?.id, typing: false, chat_active: true });
-    }, 2000);
-  };
 
   useEffect(() => {
     const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
@@ -676,7 +653,7 @@ export default function SessionPage() {
     const { data } = await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser.id, content }).select().single();
     if (data) {
       if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
-      setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: isStudentOnline ? 'delivered' : 'sent' } : m) }));
+      setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: studentStatus === 'online' ? 'delivered' : 'sent' } : m) }));
     }
   };
 
@@ -689,7 +666,7 @@ export default function SessionPage() {
     const { data } = await supabase.from('live_class_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser.id, content }).select().single();
     if (data) {
       if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
-      setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: isStudentOnline ? 'delivered' : 'sent' } : m) }));
+      setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: studentStatus === 'online' ? 'delivered' : 'sent' } : m) }));
     }
   };
 
@@ -860,7 +837,7 @@ export default function SessionPage() {
                       })()}
                       <div ref={classBottomRef} />
                     </div>
-                    <ChatInput value={classInput} onChange={setClassInput} onSend={sendClassMsg} placeholder="Execute live instruction..." />
+                    <ChatInput value={classInput} onChange={(val: string) => { setClassInput(val); handleTyping(); }} onSend={sendClassMsg} placeholder="Execute live instruction..." />
                   </div>
                 )}
               </motion.div>
