@@ -1018,7 +1018,7 @@ export default function StudentSessionsPage() {
                    <p className="text-[10px] font-black uppercase tracking-[5px] text-slate-400">Mission Logs</p>
                    <div className="bg-white rounded-[2rem] border border-slate-100 p-8 shadow-sm">
                       <div className="space-y-4">
-                        {messages.filter(m => m.content.toLowerCase().includes('📅 class scheduled') || m.content.toLowerCase().includes('discussion started'))
+                        {messages.filter(m => m.text.toLowerCase().includes('📅 class scheduled') || m.text.toLowerCase().includes('discussion started'))
                           .map(m => (
                             <div key={m.id} className="flex gap-4 items-start group">
                               <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 group-hover:bg-blue-50 transition-colors">
@@ -1030,7 +1030,7 @@ export default function StudentSessionsPage() {
                               </div>
                             </div>
                           ))}
-                        {messages.filter(m => m.content.toLowerCase().includes('📅 class scheduled') || m.content.toLowerCase().includes('discussion started')).length === 0 && (
+                        {messages.filter(m => m.text.toLowerCase().includes('📅 class scheduled') || m.text.toLowerCase().includes('discussion started')).length === 0 && (
                           <div className="py-12 text-center opacity-30">
                             <History className="w-10 h-10 mx-auto mb-4" />
                             <p className="text-[10px] font-black uppercase tracking-[3px]">No communication logs yet</p>
