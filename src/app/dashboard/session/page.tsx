@@ -573,7 +573,7 @@ export default function SessionPage() {
             sender: m.sender_id === user?.id ? 'tutor' : 'student',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === user?.id ? (studentOnlineRef.current ? 'delivered' : 'sent') : undefined
+            status: (m.sender_id === user?.id ? (studentOnlineRef.current ? 'delivered' : 'sent') : undefined) as MessageStatus | undefined
           }] };
         });
       })
@@ -595,7 +595,7 @@ export default function SessionPage() {
             sender: m.sender_id === user?.id ? 'tutor' : 'student',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === user?.id ? 'sent' : undefined
+            status: (m.sender_id === user?.id ? 'sent' : undefined) as MessageStatus | undefined
           };
           return { ...prev, [student.id]: [...studentMsgs, msg] };
         });

@@ -441,7 +441,7 @@ export default function StudentSessionsPage() {
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
-          const status: MessageStatus = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
+          const status: MessageStatus | undefined = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
           return [...prev, {
             id: m.id,
             sender: m.sender_id === user?.id ? 'student' : 'tutor',
@@ -458,7 +458,7 @@ export default function StudentSessionsPage() {
         if (!sess || m.room_id !== sess.roomId) return;
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
-          const status: MessageStatus = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
+          const status: MessageStatus | undefined = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
           return [...prev, {
             id: m.id,
             sender: m.sender_id === user?.id ? 'student' : 'tutor',
