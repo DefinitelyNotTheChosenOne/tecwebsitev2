@@ -1055,9 +1055,18 @@ export default function StudentSessionsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
-                      {classMessages.length === 0 && <div className="py-20 text-center text-slate-300 font-black uppercase tracking-[3px] italic">Class is live. Start interacting...</div>}
+                    <div className="flex-1 overflow-y-auto space-y-6 md:space-y-6 pr-4 custom-scroll">
                       {classMessages.map(m => <ChatBubble key={m.id} msg={m} tutorInitial={selectedSession?.tutorInitial || 'T'} />)}
+                      {isTutorTyping && (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2 items-center text-[10px] font-black uppercase tracking-widest text-slate-300 italic ml-11">
+                          <div className="flex gap-1">
+                            <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </div>
+                          Specialist is manifesting a response...
+                        </motion.div>
+                      )}
                       <div ref={classBottomRef} />
                     </div>
                     <ChatInput value={classInput} onChange={setClassInput} onSend={sendClassMsg} placeholder="Ask a question..." />
