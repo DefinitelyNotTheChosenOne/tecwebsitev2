@@ -114,7 +114,7 @@ const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: {
 MessageStatusIcon.displayName = 'MessageStatusIcon';
 
 // ─── Shared Components ──────────────────────────────────────────────
-const ChatBubble = memo(({ msg, tutorInitial, tutorAvatar, isReportingMode, isSelected, toggleSelect, onVisible }: any) => {
+const ChatBubble = memo(({ msg, tutorInitial, tutorAvatar, isReportingMode, isSelected, toggleSelect, onVisible, showStatus }: any) => {
   const bubbleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -151,7 +151,7 @@ const ChatBubble = memo(({ msg, tutorInitial, tutorAvatar, isReportingMode, isSe
         <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'student' ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
-          {msg.sender === 'student' && <MessageStatusIcon status={msg.status} recipientInitial={tutorInitial} recipientAvatar={tutorAvatar} />}
+          {msg.sender === 'student' && showStatus && <MessageStatusIcon status={msg.status} recipientInitial={tutorInitial} recipientAvatar={tutorAvatar} />}
         </div>
       </div>
     </div>
@@ -467,13 +467,12 @@ export default function StudentSessionsPage() {
 
     channel
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-        console.log("[STUDENT REALTIME] Incoming Message:", payload);
         const m = payload.new as any;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
 
-        // ── Auto-update Delivered Status in DB ───────────────────────
+        // Auto-mark as delivered if we're the receiver
         if (m.sender_id !== user?.id && !m.delivered_at) {
           supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
         }
@@ -482,14 +481,18 @@ export default function StudentSessionsPage() {
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
           const status: MessageStatus | undefined = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
-          return [...prev, {
-            id: m.id,
-            sender: m.sender_id === user?.id ? 'student' : 'tutor',
-            text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status
-          } as Message];
+          return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status } as Message];
         });
+      })
+      // ── KEY FIX: Listen for UPDATE events so seen status propagates instantly ──
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' }, (payload) => {
+        const m = payload.new as any;
+        const sess = selectedSessionRef.current;
+        const user = currentUserRef.current;
+        if (!sess || m.room_id !== sess.roomId) return;
+        if (m.sender_id !== user?.id) return; // only care about OUR messages being updated
+        const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent';
+        setMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
       .on('broadcast', { event: 'new_message' }, (payload) => {
         const m = payload.payload;
@@ -499,13 +502,7 @@ export default function StudentSessionsPage() {
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
           const status: MessageStatus | undefined = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
-          return [...prev, {
-            id: m.id,
-            sender: m.sender_id === user?.id ? 'student' : 'tutor',
-            text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status
-          } as Message];
+          return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status } as Message];
         });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload) => {
@@ -515,14 +512,17 @@ export default function StudentSessionsPage() {
         if (!sess || m.room_id !== sess.roomId) return;
         setClassMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
-          return [...prev, {
-            id: m.id,
-            sender: m.sender_id === user?.id ? 'student' : 'tutor',
-            text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === user?.id ? 'sent' : undefined
-          } as Message];
+          return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: m.sender_id === user?.id ? 'sent' : undefined } as Message];
         });
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'live_class_messages' }, (payload) => {
+        const m = payload.new as any;
+        const sess = selectedSessionRef.current;
+        const user = currentUserRef.current;
+        if (!sess || m.room_id !== sess.roomId) return;
+        if (m.sender_id !== user?.id) return;
+        const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent';
+        setClassMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
       .on('broadcast', { event: 'new_class_message' }, (payload) => {
         const m = payload.payload;
@@ -531,13 +531,7 @@ export default function StudentSessionsPage() {
         if (!sess || m.room_id !== sess.roomId) return;
         setClassMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
-          return [...prev, {
-            id: m.id,
-            sender: m.sender_id === user?.id ? 'student' : 'tutor',
-            text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === user?.id ? 'sent' : undefined
-          } as Message];
+          return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: m.sender_id === user?.id ? 'sent' : undefined } as Message];
         });
       })
       // ── Tutor read our messages → upgrade to Seen ─────────────────────
@@ -1099,18 +1093,39 @@ export default function StudentSessionsPage() {
                        <p className="text-slate-300 font-black uppercase tracking-[3px] italic text-sm">Start the conversation...</p>
                      </div>
                   )}
-                  {messages.map(m => (
-                    <ChatBubble 
-                      key={m.id} 
-                      msg={m} 
-                      tutorInitial={selectedSession?.tutorInitial || 'T'} 
-                      tutorAvatar={selectedSession?.tutorAvatar}
-                      isReportingMode={isReportingMode}
-                      isSelected={selectedMessages.includes(m.id)}
-                      toggleSelect={(id: string) => setSelectedMessages(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
-                      onVisible={markAsRead}
-                    />
-                  ))}
+                  {(() => {
+                    const myMsgs = messages;
+                    // Index of last message sent by me (for sent/delivered icon)
+                    const lastMyMsgIdx = myMsgs.reduce((last, m, i) => m.sender === 'student' ? i : last, -1);
+                    // Index of highest-index message that is 'seen' (for the avatar jump)
+                    const lastSeenIdx = myMsgs.reduce((last, m, i) => m.sender === 'student' && m.status === 'seen' ? i : last, -1);
+                    return myMsgs.map((m, i) => {
+                      // Messenger rules:
+                      // - 'seen' avatar: only on the most recent seen message
+                      // - 'sending'/'sent'/'delivered': only on the very last sent message (if not yet seen)
+                      let showStatus = false;
+                      if (m.sender === 'student') {
+                        if (m.status === 'seen') {
+                          showStatus = i === lastSeenIdx;
+                        } else if (m.status === 'sending' || m.status === 'sent' || m.status === 'delivered') {
+                          showStatus = i === lastMyMsgIdx && lastSeenIdx < i;
+                        }
+                      }
+                      return (
+                        <ChatBubble 
+                          key={m.id} 
+                          msg={m} 
+                          tutorInitial={selectedSession?.tutorInitial || 'T'} 
+                          tutorAvatar={selectedSession?.tutorAvatar}
+                          isReportingMode={isReportingMode}
+                          isSelected={selectedMessages.includes(m.id)}
+                          toggleSelect={(id: string) => setSelectedMessages(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                          onVisible={markAsRead}
+                          showStatus={showStatus}
+                        />
+                      );
+                    });
+                  })()}
                   <div ref={msgBottomRef} />
                 </div>
                 

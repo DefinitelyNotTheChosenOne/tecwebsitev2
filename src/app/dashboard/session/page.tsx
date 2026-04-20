@@ -441,7 +441,12 @@ export default function SessionPage() {
         const existing = prev[selectedStudent.id] || [];
         const existingIds = new Set(existing.filter(m => !String(m.id).startsWith('opt-')).map(m => m.id));
         const newOnes = fetched.filter(m => !existingIds.has(m.id));
-        if (newOnes.length === 0) return prev;
+        // Always apply: merge new messages AND update statuses of existing ones
+        const hasStatusChanges = fetched.some(f => {
+          const ex = existing.find(e => e.id === f.id);
+          return ex && ex.status !== f.status;
+        });
+        if (newOnes.length === 0 && !hasStatusChanges) return prev;
         const merged = [...existing.filter(m => String(m.id).startsWith('opt-')), ...fetched];
         return { ...prev, [selectedStudent.id]: merged };
       });
@@ -475,7 +480,11 @@ export default function SessionPage() {
           const existing = prev[selectedStudent.id] || [];
           const existingIds = new Set(existing.filter(m => !String(m.id).startsWith('opt-')).map(m => m.id));
           const newOnes = mapped.filter(m => !existingIds.has(m.id));
-          if (newOnes.length === 0) return prev;
+          const hasStatusChanges = mapped.some(f => {
+            const ex = existing.find(e => e.id === f.id);
+            return ex && ex.status !== f.status;
+          });
+          if (newOnes.length === 0 && !hasStatusChanges) return prev;
           return { ...prev, [selectedStudent.id]: [...existing.filter(m => String(m.id).startsWith('opt-')), ...mapped] };
         });
       }
@@ -795,16 +804,27 @@ export default function SessionPage() {
                 <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                   {(() => {
                     const msgs = discMsgs;
+                    const lastMyMsgIdx = msgs.reduce((last, m, i) => m.sender === 'tutor' ? i : last, -1);
                     const lastSeenIdx = msgs.reduce((last, m, i) => m.sender === 'tutor' && m.status === 'seen' ? i : last, -1);
-                    return msgs.map((m, i) => (
-                      <ChatBubble 
-                        key={m.id} 
-                        msg={m} 
-                        selectedStudent={selectedStudent} 
-                        onVisible={markAsRead} 
-                        showStatus={m.status !== 'seen' || i === lastSeenIdx}
-                      />
-                    ));
+                    return msgs.map((m, i) => {
+                      let showStatus = false;
+                      if (m.sender === 'tutor') {
+                        if (m.status === 'seen') {
+                          showStatus = i === lastSeenIdx;
+                        } else if (m.status === 'sending' || m.status === 'sent' || m.status === 'delivered') {
+                          showStatus = i === lastMyMsgIdx && lastSeenIdx < i;
+                        }
+                      }
+                      return (
+                        <ChatBubble 
+                          key={m.id} 
+                          msg={m} 
+                          selectedStudent={selectedStudent} 
+                          onVisible={markAsRead} 
+                          showStatus={showStatus}
+                        />
+                      );
+                    });
                   })()}
                   <div ref={discBottomRef} />
                 </div>
@@ -824,16 +844,27 @@ export default function SessionPage() {
                     <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                       {(() => {
                         const msgs = classMsgs;
+                        const lastMyMsgIdx = msgs.reduce((last, m, i) => m.sender === 'tutor' ? i : last, -1);
                         const lastSeenIdx = msgs.reduce((last, m, i) => m.sender === 'tutor' && m.status === 'seen' ? i : last, -1);
-                        return msgs.map((m, i) => (
-                          <ChatBubble 
-                            key={m.id} 
-                            msg={m} 
-                            selectedStudent={selectedStudent} 
-                            onVisible={markClassAsRead} 
-                            showStatus={m.status !== 'seen' || i === lastSeenIdx}
-                          />
-                        ));
+                        return msgs.map((m, i) => {
+                          let showStatus = false;
+                          if (m.sender === 'tutor') {
+                            if (m.status === 'seen') {
+                              showStatus = i === lastSeenIdx;
+                            } else if (m.status === 'sending' || m.status === 'sent' || m.status === 'delivered') {
+                              showStatus = i === lastMyMsgIdx && lastSeenIdx < i;
+                            }
+                          }
+                          return (
+                            <ChatBubble 
+                              key={m.id} 
+                              msg={m} 
+                              selectedStudent={selectedStudent} 
+                              onVisible={markClassAsRead} 
+                              showStatus={showStatus}
+                            />
+                          );
+                        });
                       })()}
                       <div ref={classBottomRef} />
                     </div>
