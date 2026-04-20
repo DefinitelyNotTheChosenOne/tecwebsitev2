@@ -448,7 +448,9 @@ export default function StudentSessionsPage() {
         .eq('room_id', selectedSession.roomId)
         .neq('sender_id', currentUser?.id)
         .neq('status', 'seen')
-        .then();
+        .then(() => {
+          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
+        });
     }
   }, [activeTab, selectedSession?.roomId, currentUser?.id, messages]);
 
@@ -459,7 +461,9 @@ export default function StudentSessionsPage() {
         .eq('room_id', selectedSession.roomId)
         .neq('sender_id', currentUser?.id)
         .neq('status', 'seen')
-        .then();
+        .then(() => {
+          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
+        });
     }
   }, [activeTab, selectedSession?.roomId, currentUser?.id, classMessages]);
 
@@ -554,6 +558,10 @@ export default function StudentSessionsPage() {
 
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         setMessages(prev => {
+          if (m.sender_id === user?.id) {
+            const hasOptimistic = prev.some(existing => String(existing.id).startsWith('opt-') && existing.text === m.content);
+            if (hasOptimistic) return prev;
+          }
           if (prev.some(existing => existing.id === m.id)) return prev;
           const status: MessageStatus | undefined = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
           return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status } as Message];
@@ -590,6 +598,10 @@ export default function StudentSessionsPage() {
            if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'message_delivered', payload: { roomId: sess.roomId, msgId: m.id } });
         }
         setClassMessages(prev => {
+          if (m.sender_id === user?.id) {
+            const hasOptimistic = prev.some(existing => String(existing.id).startsWith('opt-') && existing.text === m.content);
+            if (hasOptimistic) return prev;
+          }
           if (prev.some(existing => existing.id === m.id)) return prev;
           return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: m.sender_id === user?.id ? 'sent' : undefined } as Message];
         });

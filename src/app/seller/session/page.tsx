@@ -504,7 +504,9 @@ export default function SessionPage() {
         .eq('room_id', selectedStudent.roomId)
         .neq('sender_id', currentUser?.id)
         .neq('status', 'seen')
-        .then();
+        .then(() => {
+          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
+        });
     }
   }, [activeTab, selectedStudent?.roomId, currentUser?.id, discMsgs]);
 
@@ -515,7 +517,9 @@ export default function SessionPage() {
         .eq('room_id', selectedStudent.roomId)
         .neq('sender_id', currentUser?.id)
         .neq('status', 'seen')
-        .then();
+        .then(() => {
+          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
+        });
     }
   }, [activeTab, selectedStudent?.roomId, currentUser?.id, classMsgs]);
 
@@ -603,6 +607,10 @@ export default function SessionPage() {
           
           setAllDiscMsgs(prev => {
             const studentMsgs = prev[student.id] || [];
+            if (m.sender_id === user?.id) {
+              const hasOptimistic = studentMsgs.some(existing => String(existing.id).startsWith('opt-') && existing.text === m.content);
+              if (hasOptimistic) return prev;
+            }
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
             
             const list = m.sender_id !== user?.id 
@@ -634,6 +642,10 @@ export default function SessionPage() {
           }
           setAllClassMsgs(prev => {
             const studentMsgs = prev[student.id] || [];
+            if (m.sender_id === user?.id) {
+              const hasOptimistic = studentMsgs.some(existing => String(existing.id).startsWith('opt-') && existing.text === m.content);
+              if (hasOptimistic) return prev;
+            }
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
 
             const list = m.sender_id !== user?.id 
@@ -684,20 +696,6 @@ export default function SessionPage() {
       clearInterval(pollInterval);
     };
   }, [selectedStudent?.roomId, currentUser?.id]);
-
-  useEffect(() => {
-    if (activeTab !== 'discussion' || !selectedStudent?.roomId || !currentUser?.id) return;
-    
-    setStudents(prev => prev.map(s => s.roomId === selectedStudent.roomId ? { ...s, hasUnread: false } : s));
-
-    supabase
-      .from('chat_messages')
-      .update({ read_at: new Date().toISOString() })
-      .eq('room_id', selectedStudent.roomId)
-      .neq('sender_id', currentUser.id)
-      .is('read_at', null)
-      .then();
-  }, [selectedStudent, activeTab, currentUser]);
 
   const markAsRead = useCallback((msgId: string | number) => {
     const student = selectedStudentRef.current;
