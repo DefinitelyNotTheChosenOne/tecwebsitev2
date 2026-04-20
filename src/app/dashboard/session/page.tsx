@@ -44,6 +44,7 @@ type StudentProfile = {
   name: string;
   subject: string;
   initial: string;
+  avatar_url?: string;
   lastMsg: string;
   status: 'active' | 'pending';
   lastActive: string;
@@ -102,14 +103,14 @@ const MessageStatusIcon = ({ status, recipientInitial, recipientAvatar }: { stat
 // ─── Shared Components ──────────────────────────────────────────────
 const ChatBubble = ({ msg, selectedStudent }: { msg: Message, selectedStudent: StudentProfile | null }) => (
   <div className={`flex gap-3 ${msg.sender === 'tutor' ? 'flex-row-reverse' : 'flex-row'}`}>
-    <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ${msg.sender === 'tutor' ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>
-      {msg.sender === 'tutor' ? 'T' : (selectedStudent?.initial || 'S')}
+    <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ring-1 ring-slate-100 overflow-hidden ${msg.sender === 'tutor' ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>
+      {msg.sender === 'tutor' ? 'T' : (selectedStudent?.avatar_url ? <img src={selectedStudent.avatar_url} className="w-full h-full object-cover" alt="" /> : (selectedStudent?.initial || 'S'))}
     </div>
     <div className={`max-w-[75%] ${msg.sender === 'tutor' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
       <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'tutor' ? 'bg-brand-dark text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
-        {msg.sender === 'tutor' && <MessageStatusIcon status={msg.status} recipientInitial={selectedStudent?.initial} />}
+        {msg.sender === 'tutor' && <MessageStatusIcon status={msg.status} recipientInitial={selectedStudent?.initial} recipientAvatar={selectedStudent?.avatar_url} />}
       </div>
     </div>
   </div>
@@ -333,6 +334,7 @@ export default function SessionPage() {
             id: room.student_id,
             roomId: room.id,
             name: name,
+            avatar_url: (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.avatar_url,
             subject: subject || 'General Discussion',
             initial: name.charAt(0).toUpperCase(),
             lastMsg: '...', 
@@ -520,6 +522,7 @@ export default function SessionPage() {
 
     channel
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+        const m = payload.new as any;
         console.log("[REALTIME] Incoming Message Row:", m);
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
@@ -549,6 +552,11 @@ export default function SessionPage() {
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
         if (!student || m.room_id !== student.roomId) return;
+        
+        // ── Auto-update Delivered Status in DB ───────────────────────
+        if (m.sender_id !== user?.id && !m.delivered_at) {
+          supabase.from('live_class_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+        }
         setAllClassMsgs(prev => {
           const studentMsgs = prev[student.id] || [];
           if (studentMsgs.some(existing => existing.id === m.id)) return prev;
@@ -677,10 +685,10 @@ export default function SessionPage() {
 
   const handleTyping = () => {
     if (!channelRef.current) return;
-    channelRef.current.track({ user_id: currentUser?.id, typing: true });
+    channelRef.current.track({ user_id: currentUser?.id, typing: true, chat_active: true });
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      channelRef.current?.track({ user_id: currentUser?.id, typing: false });
+      channelRef.current?.track({ user_id: currentUser?.id, typing: false, chat_active: true });
     }, 2000);
   };
 
@@ -971,8 +979,13 @@ export default function SessionPage() {
                 <Link href="/dashboard" className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-brand-dark transition-colors"><ChevronLeft className="w-3.5 h-3.5" />Back</Link>
                 <div className="hidden md:block h-6 w-px bg-slate-100" />
                 <div className="flex flex-col items-start leading-none">
-                  <p className="text-[11px] font-black text-brand-dark uppercase italic">{selectedStudent.name}</p>
-                  <p className="text-[9px] font-bold text-brand-primary uppercase tracking-widest mt-1">{selectedStudent.subject}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[11px] font-black text-brand-dark uppercase italic">{selectedStudent.name}</p>
+                    <div className={`w-2 h-2 rounded-full ${isStudentOnline ? 'bg-green-500 animate-pulse ring-4 ring-green-500/20' : 'bg-slate-300'}`} />
+                  </div>
+                  <p className="text-[9px] font-bold text-brand-primary uppercase tracking-widest mt-1">
+                    {isStudentOnline ? 'Online Now' : 'Offline'} — {selectedStudent.subject}
+                  </p>
                 </div>
               </div>
             </header>

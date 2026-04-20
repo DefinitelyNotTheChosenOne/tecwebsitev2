@@ -41,6 +41,7 @@ type TutorSession = {
   roomId: string;
   tutorName: string;
   tutorInitial: string;
+  tutorAvatar?: string;
   subject: string;
   status: 'pending' | 'accepted' | 'declined';
   lastMsg: string;
@@ -61,26 +62,41 @@ const toDateTime = (dateStr: string, timeStr: string) => new Date(`${dateStr}T${
 
 type Tab = 'updates' | 'discussion' | 'class' | 'history';
 
+
+
 // ─── Message Status Icon ────────────────────────────────────────────────
-const MessageStatusIcon = ({ status, recipientInitial }: { status?: MessageStatus; recipientInitial?: string }) => {
+const MessageStatusIcon = ({ status, recipientInitial, recipientAvatar }: { status?: MessageStatus; recipientInitial?: string, recipientAvatar?: string }) => {
   if (!status) return null;
-  if (status === 'sending') return <div className="w-3 h-3 rounded-full border-2 border-blue-200/80 shrink-0" />;
-  if (status === 'sent')     return <div className="w-3 h-3 rounded-full border-2 border-blue-300 shrink-0" />;
+  
+  // 1. Sending: A hollow, light-gray circle
+  if (status === 'sending') return <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0" />;
+  
+  // 2. Sent: A hollow circle with a blue outline
+  if (status === 'sent') return <div className="w-3.5 h-3.5 rounded-full border border-blue-400 shrink-0" />;
+  
+  // 3. Delivered: A filled gray circle with a checkmark
   if (status === 'delivered') return (
-    <div className="w-3 h-3 rounded-full bg-blue-300 flex items-center justify-center shrink-0">
-      <svg className="w-1.5 h-1.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+    <div className="w-3.5 h-3.5 rounded-full bg-slate-400 flex items-center justify-center shrink-0">
+      <CheckCircle2 className="w-2 h-2 text-white" strokeWidth={4} />
     </div>
   );
+  
+  // 4. Seen: recipient's avatar
   if (status === 'seen') return (
-    <div className="w-3.5 h-3.5 rounded-full bg-brand-primary flex items-center justify-center text-[7px] font-black text-brand-dark shrink-0">
-      {(recipientInitial || 'T').charAt(0)}
+    <div className="w-4 h-4 rounded-full bg-brand-primary overflow-hidden flex items-center justify-center shrink-0 shadow-sm ring-1 ring-white">
+      {recipientAvatar ? (
+        <img src={recipientAvatar} className="w-full h-full object-cover" alt="" />
+      ) : (
+        <span className="text-[7px] font-black text-brand-dark">{(recipientInitial || 'T').charAt(0)}</span>
+      )}
     </div>
   );
+  
   return null;
 };
 
 // ─── Shared Components ──────────────────────────────────────────────
-const ChatBubble = ({ msg, tutorInitial, isReportingMode, isSelected, toggleSelect }: any) => (
+const ChatBubble = ({ msg, tutorInitial, tutorAvatar, isReportingMode, isSelected, toggleSelect }: any) => (
   <div 
     onClick={() => isReportingMode && toggleSelect?.(msg.id)}
     className={`flex items-start gap-3 w-full ${msg.sender === 'student' ? 'flex-row-reverse' : 'flex-row'} ${isReportingMode ? 'cursor-pointer p-2 rounded-xl transition-all hover:bg-slate-50' : ''} ${isSelected ? 'bg-red-50 ring-1 ring-red-200' : ''}`}
@@ -92,14 +108,14 @@ const ChatBubble = ({ msg, tutorInitial, isReportingMode, isSelected, toggleSele
         </div>
       </div>
     )}
-    <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ${msg.sender === 'student' ? 'bg-blue-500 text-white' : 'bg-brand-primary text-brand-dark'}`}>
-      {msg.sender === 'student' ? 'Y' : tutorInitial}
+    <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ring-1 ring-slate-100 overflow-hidden ${msg.sender === 'student' ? 'bg-blue-600 text-white' : 'bg-brand-primary text-brand-dark'}`}>
+      {msg.sender === 'student' ? 'Y' : (tutorAvatar ? <img src={tutorAvatar} className="w-full h-full object-cover" alt="" /> : tutorInitial)}
     </div>
     <div className={`max-w-[75%] ${msg.sender === 'student' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-      <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'student' ? 'bg-blue-500 text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
+      <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'student' ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
-        {msg.sender === 'student' && <MessageStatusIcon status={msg.status} recipientInitial={tutorInitial} />}
+        {msg.sender === 'student' && <MessageStatusIcon status={msg.status} recipientInitial={tutorInitial} recipientAvatar={tutorAvatar} />}
       </div>
     </div>
   </div>
@@ -153,6 +169,7 @@ export default function StudentSessionsPage() {
   const [isTutorTyping, setIsTutorTyping] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED' | 'OFFLINE'>('CONNECTING');
   const [isTutorOnline, setIsTutorOnline] = useState(false);
+  const tutorOnlineRef = useRef(false);
   const typingTimeoutRef = useRef<any>(null);
 
   // ─── Report States ────────────────────────────────────────────────
@@ -203,13 +220,14 @@ export default function StudentSessionsPage() {
       // Check which rooms have signals to extract subjects
       const { data: allMessages } = await supabase
         .from('chat_messages')
-        .select('room_id, sender_id, content')
+        .select('room_id, sender_id, content, created_at')
         .in('room_id', roomIds)
         .order('created_at', { ascending: true });
 
       const sessionList: TutorSession[] = rooms.map((room: any) => {
         const tutorProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
         const name = tutorProfile?.full_name || 'Tutor';
+        const avatar = tutorProfile?.avatar_url;
         const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
         const roomMessages = (allMessages || []).filter(m => m.room_id === room.id);
         const hasTutorResponse = roomMessages.some(m => m.sender_id === room.tutor_id);
@@ -224,10 +242,11 @@ export default function StudentSessionsPage() {
           roomId: room.id,
           tutorName: name,
           tutorInitial: name.charAt(0).toUpperCase(),
+          tutorAvatar: avatar,
           subject: extractedSubject,
           status: hasTutorResponse ? 'accepted' : 'pending',
-          lastMsg: '...',
-          lastActive: 'Now',
+          lastMsg: roomMessages[roomMessages.length - 1]?.content || 'Signal established...',
+          lastActive: roomMessages[roomMessages.length - 1]?.created_at || room.created_at,
           scheduledClasses: roomSchedules,
         } as TutorSession;
       });
@@ -382,6 +401,12 @@ export default function StudentSessionsPage() {
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
+
+        // ── Auto-update Delivered Status in DB ───────────────────────
+        if (m.sender_id !== user?.id && !m.delivered_at) {
+          supabase.from('chat_messages').update({ delivered_at: new Date().toISOString() }).eq('id', m.id).then();
+        }
+
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
@@ -454,6 +479,7 @@ export default function StudentSessionsPage() {
         const others = Object.values(state).flat() as any[];
         const tutorOnline = others.some((u: any) => u.user_id !== user?.id);
         setIsTutorOnline(tutorOnline);
+        tutorOnlineRef.current = tutorOnline;
         if (tutorOnline) {
           setMessages(prev => prev.map(m => m.sender === 'student' && m.status === 'sent' ? { ...m, status: 'delivered' as MessageStatus } : m));
           setClassMessages(prev => prev.map(m => m.sender === 'student' && m.status === 'sent' ? { ...m, status: 'delivered' as MessageStatus } : m));
@@ -499,10 +525,10 @@ export default function StudentSessionsPage() {
 
   const handleTyping = () => {
     if (!channelRef.current) return;
-    channelRef.current.track({ user_id: currentUser?.id, typing: true });
+    channelRef.current.track({ user_id: currentUser?.id, typing: true, chat_active: true });
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      channelRef.current?.track({ user_id: currentUser?.id, typing: false });
+      channelRef.current?.track({ user_id: currentUser?.id, typing: false, chat_active: true });
     }, 2000);
   };
 
@@ -787,11 +813,13 @@ export default function StudentSessionsPage() {
               {selectedSession?.tutorInitial || '?'}
             </div>
             <div>
-              <p className="text-sm font-black text-brand-dark uppercase italic leading-none">{selectedSession?.tutorName || 'No Tutor'}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-black text-brand-dark uppercase italic leading-none">{selectedSession?.tutorName || 'No Tutor'}</p>
+                <div className={`w-1.5 h-1.5 rounded-full ${isTutorOnline ? 'bg-green-500 animate-pulse ring-4 ring-green-500/20' : 'bg-slate-300'}`} />
+              </div>
               <div className="flex items-center gap-2 mt-1">
-                <div className={`w-1.5 h-1.5 rounded-full ${selectedSession?.status === 'accepted' ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
-                <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedSession?.status === 'accepted' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                  {selectedSession?.status === 'accepted' ? 'Connected' : 'Pending Engagement'}
+                <p className={`text-[9px] font-bold uppercase tracking-widest ${isTutorOnline ? 'text-green-600' : 'text-slate-400'}`}>
+                  {isTutorOnline ? 'Online Now' : 'Offline'} — {selectedSession?.status === 'accepted' ? 'Engaged' : 'Pending'}
                 </p>
               </div>
             </div>
@@ -989,6 +1017,7 @@ export default function StudentSessionsPage() {
                       key={m.id} 
                       msg={m} 
                       tutorInitial={selectedSession?.tutorInitial || 'T'} 
+                      tutorAvatar={selectedSession?.tutorAvatar}
                       isReportingMode={isReportingMode}
                       isSelected={selectedMessages.includes(m.id)}
                       toggleSelect={(id: string) => setSelectedMessages(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
@@ -1071,7 +1100,7 @@ export default function StudentSessionsPage() {
                       </div>
                     </div>
                     <div className="flex-1 overflow-y-auto space-y-6 md:space-y-6 pr-4 custom-scroll">
-                      {classMessages.map(m => <ChatBubble key={m.id} msg={m} tutorInitial={selectedSession?.tutorInitial || 'T'} />)}
+                      {classMessages.map(m => <ChatBubble key={m.id} msg={m} tutorInitial={selectedSession?.tutorInitial || 'T'} tutorAvatar={selectedSession?.tutorAvatar} />)}
                       <div ref={classBottomRef} />
                     </div>
                     <ChatInput value={classInput} onChange={setClassInput} onSend={sendClassMsg} placeholder="Ask a question..." />
