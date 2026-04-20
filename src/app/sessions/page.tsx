@@ -29,7 +29,15 @@ const ScrollStyles = () => (
 
 // ─── Types ──────────────────────────────────────────────────────────────
 type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen';
-type Message = { id: string; sender: 'student' | 'tutor'; text: string; time: string; status?: MessageStatus; };
+type Message = { 
+  id: string; 
+  sender: 'student' | 'tutor'; 
+  text: string; 
+  time: string; 
+  status?: MessageStatus;
+  read_at?: string | null;
+  delivered_at?: string | null;
+};
 type ScheduledClass = {
   id: string;
   class_date: string;
@@ -617,12 +625,6 @@ export default function StudentSessionsPage() {
         });
       });
   }, [currentUser]);
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      emitTyping(false);
-    }, 2000);
-  };
 
   // ─── Auto-scroll Logic ──────────────────────────────────────────
   useEffect(() => {
