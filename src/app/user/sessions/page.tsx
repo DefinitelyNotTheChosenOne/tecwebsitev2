@@ -377,8 +377,12 @@ export default function StudentSessionsPage() {
     if (!currentUser?.id) return;
     if (globalWatchChannelRef.current) return;
 
+    // ── KEY FIX: Remove any existing channel with this name to prevent 'after subscribe' errors ──
+    const channelName = `student-global-${currentUser.id}`;
+    supabase.removeChannel(supabase.channel(channelName));
+
     const globalChannel = supabase
-      .channel(`student-global-${currentUser.id}`)
+      .channel(channelName)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -503,7 +507,10 @@ export default function StudentSessionsPage() {
     fetchMsgs();
     const pollInterval = setInterval(fetchMsgs, 2500);
 
-    const channel = supabase.channel(`session:${selectedSession.roomId}`, {
+    const channelName = `session:${selectedSession.roomId}`;
+    supabase.removeChannel(supabase.channel(channelName));
+
+    const channel = supabase.channel(channelName, {
       config: { broadcast: { ack: true } },
     });
     channelRef.current = channel;

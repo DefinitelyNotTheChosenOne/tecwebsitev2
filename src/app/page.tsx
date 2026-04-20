@@ -56,6 +56,8 @@ export default function Home() {
         router.replace('/admin/dashboard');
       } else if (data.role === 'seller') {
         router.replace('/seller');
+      } else if (data.role === 'user') {
+        router.replace('/user');
       }
     }
   };
@@ -126,19 +128,19 @@ export default function Home() {
                 className="flex items-center gap-6"
               >
                 <Link 
-                  href="/seller"
+                  href={profile?.role === 'seller' ? "/seller" : "/user"}
                   className="flex items-center gap-4 hover:opacity-70 transition-opacity cursor-pointer group bg-white/5 border border-white/10 p-2 pr-6 rounded-full"
                 >
                    <div className="w-10 h-10 rounded-full bg-brand-primary/20 border border-brand-primary/40 flex items-center justify-center overflow-hidden">
                       {profile?.avatar_url ? (
                         <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
                       ) : (
-                        <span className="text-sm font-black text-brand-primary">{profile?.full_name?.charAt(0)}</span>
+                        <span className="text-sm font-black text-brand-primary">{(profile?.full_name || profile?.role || 'U').charAt(0)}</span>
                       )}
                    </div>
                    <div className="flex flex-col">
                       <span className="text-[8px] font-black text-brand-primary uppercase tracking-widest leading-none mb-1">Authenticated</span>
-                      <span className="text-sm font-bold text-white tracking-tight">{profile?.full_name || 'Specialist'}</span>
+                      <span className="text-sm font-bold text-white tracking-tight">{profile?.full_name || 'My Dashboard'}</span>
                    </div>
                 </Link>
 

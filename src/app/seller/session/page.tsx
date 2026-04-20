@@ -462,8 +462,11 @@ export default function SessionPage() {
     if (!currentUser?.id) return;
     if (globalWatchChannelRef.current) return;
 
+    const channelName = `specialist-global-${currentUser.id}`;
+    supabase.removeChannel(supabase.channel(channelName));
+
     const globalChannel = supabase
-      .channel(`specialist-global-${currentUser.id}`)
+      .channel(channelName)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload: { new: any }) => {
         const m = payload.new;
         const currentStudents = studentsRef.current;
@@ -550,7 +553,10 @@ export default function SessionPage() {
     fetchMsgs();
     const pollInterval = setInterval(fetchMsgs, 2500);
 
-    const channel = supabase.channel(`session:${selectedStudent.roomId}`, { config: { broadcast: { ack: true } } });
+    const channelName = `session:${selectedStudent.roomId}`;
+    supabase.removeChannel(supabase.channel(channelName));
+
+    const channel = supabase.channel(channelName, { config: { broadcast: { ack: true } } });
     channelRef.current = channel;
 
     channel

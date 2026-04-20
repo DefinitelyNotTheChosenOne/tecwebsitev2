@@ -68,7 +68,7 @@ const DashboardStyles = () => (
   `}</style>
 );
 
-export default function UserDashboard() {
+export default function SellerDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isTutor, setIsTutor] = useState(false);
@@ -119,14 +119,7 @@ export default function UserDashboard() {
           fetchNotifications(user.id);
           subscribeToSignals(user.id);
 
-          if (data?.role === 'user') {
-             supabase.from('help_requests')
-               .select('*')
-                .eq('student_id', user.id)
-                .then(({ data: reqs }) => {
-                   setMyRequests((reqs as unknown as HelpRequest[]) || []);
-                });
-          }
+
           
           supabase.from('tutoring_sessions')
             .select('*')
@@ -137,6 +130,10 @@ export default function UserDashboard() {
               const total = (sessions || [])?.reduce((acc: number, curr: any) => acc + (Number(curr.agreed_price) || 0), 0);
               setTotalEarnings(total || 0);
             });
+          if (data?.role === 'user') {
+            router.replace('/user');
+            return;
+          }
         } else {
           router.push('/auth');
         }
@@ -230,9 +227,9 @@ export default function UserDashboard() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-brand-primary/10 via-transparent to-transparent opacity-50" />
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between md:items-center gap-6 relative z-10">
           <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
-            <p className="text-[9px] font-black uppercase tracking-[4px] text-brand-primary mb-1.5 opacity-80">My TutorMatch</p>
+            <p className="text-[9px] font-black uppercase tracking-[4px] text-brand-primary mb-1.5 opacity-80">Specialist Command</p>
             <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-white italic uppercase leading-[0.9] mb-4">
-              {profile?.full_name?.split(' ')[0] || (isTutor ? 'Specialist' : 'Agent')} <span className="text-brand-primary block not-italic">Dashboard</span>
+              {profile?.full_name?.split(' ')[0] || 'Specialist'} <span className="text-brand-primary block not-italic">Dashboard</span>
             </h1>
             <div className="flex items-center gap-4 mt-4">
                <div className="px-4 py-1.5 bg-white/5 border border-white/10 rounded-xl backdrop-blur-xl flex items-center gap-2">
