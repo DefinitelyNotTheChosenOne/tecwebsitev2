@@ -981,16 +981,6 @@ export default function SessionPage() {
                <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col w-full px-8 md:px-12 pt-8 pb-4">
                 <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                   {discMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
-                  {isStudentTyping && (
-                    <div className="flex gap-2 items-center text-slate-400 animate-pulse pb-2 px-4">
-                      <div className="flex gap-1">
-                        <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                        <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                        <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce"></div>
-                      </div>
-                      <span className="text-[10px] font-black uppercase tracking-widest">{selectedStudent.name} is typing...</span>
-                    </div>
-                  )}
                   <div ref={discBottomRef} />
                 </div>
                 <ChatInput 
@@ -1013,16 +1003,6 @@ export default function SessionPage() {
                   <div className="h-full flex flex-col w-full px-8 md:px-12">
                     <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
                       {classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
-                      {isStudentTyping && (
-                        <div className="flex gap-2 items-center text-slate-400 animate-pulse pb-2 px-4">
-                          <div className="flex gap-1">
-                            <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                            <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                            <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce"></div>
-                          </div>
-                          <span className="text-[10px] font-black uppercase tracking-widest">Student is typing...</span>
-                        </div>
-                      )}
                       <div ref={classBottomRef} />
                     </div>
                     <ChatInput value={classInput} onChange={setClassInput} onSend={sendClassMsg} placeholder="Execute live instruction..." />
