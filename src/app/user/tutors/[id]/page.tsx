@@ -54,7 +54,7 @@ export default function PublicTutorPortfolio() {
         title: 'INBOUND HANDSHAKE SIGNAL',
         content: `${currentUser.email?.split('@')[0]} is initiating a command tunnel for your services.`,
         type: 'REQUEST',
-        link: `/dashboard/session?room=${room.id}`
+        link: `/seller/session?room=${room.id}`
       });
 
       // 3. Official Handshake Signal
@@ -65,7 +65,7 @@ export default function PublicTutorPortfolio() {
       });
 
       // 4. Deploy User to Terminal
-      router.push(`/sessions?room=${room.id}`);
+      router.push(`/user/sessions?room=${room.id}`);
     } catch (err) {
       console.error("Tunnel Failure:", err);
       alert("Encryption failure in tunnel initiation. Try again.");
@@ -98,7 +98,7 @@ export default function PublicTutorPortfolio() {
          
          <div className="max-w-6xl mx-auto px-6 h-full flex items-end pb-12 relative z-20">
             <Link 
-              href={currentUser?.id === tutor.id ? "/dashboard" : "/"} 
+              href={currentUser?.id === tutor.id ? "/seller" : "/"} 
               className="absolute top-8 left-6 flex items-center gap-3 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group"
             >
                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1" /> 
@@ -127,7 +127,7 @@ export default function PublicTutorPortfolio() {
                      <h1 className="text-6xl font-black italic tracking-tighter leading-none uppercase">{tutor.full_name}</h1>
                      {currentUser?.id === tutor.id && (
                         <Link 
-                          href="/dashboard/profile"
+                          href="/seller/profile"
                           className="p-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-brand-primary hover:text-brand-dark transition-all group/edit shadow-2xl backdrop-blur-xl"
                           title="Reconfigure Public Dossier"
                         >

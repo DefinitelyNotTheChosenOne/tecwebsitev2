@@ -142,7 +142,12 @@ const ChatBubble = memo(({ msg, selectedStudent, onVisible, showStatus }: { msg:
 
 ChatBubble.displayName = 'ChatBubble';
 
-const ChatInput = ({ value, onChange, onSend, placeholder }: any) => (
+const ChatInput = ({ value, onChange, onSend, placeholder }: { 
+  value: string; 
+  onChange: (val: string) => void; 
+  onSend: () => void; 
+  placeholder?: string; 
+}) => (
   <div className="flex items-center gap-4 bg-white border border-slate-200 p-2 rounded-2xl shadow-lg ring-1 ring-slate-100 mt-auto">
     <input 
       type="text" 
@@ -165,7 +170,7 @@ export default function SessionPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null); // Keeping as any or use User from supabase-js
   
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
@@ -197,7 +202,7 @@ export default function SessionPage() {
   const selectedStudentRef = useRef<StudentProfile | null>(null);
   const currentUserRef = useRef<any>(null);
   const studentsRef = useRef<StudentProfile[]>([]);
-  const typingTimeoutRef = useRef<any>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // ─── Robust Presence System ──────────────────────────────────────
   const { 
@@ -306,7 +311,7 @@ export default function SessionPage() {
     if (!syncChannelRef.current) {
       const syncChannel = supabase
         .channel(`purge-sync-${Math.random().toString(36).substring(7)}`)
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_rooms' }, (payload) => {
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_rooms' }, (payload: { old: any }) => {
            const deletedId = payload.old.id;
            setStudents(prev => prev.filter(s => s.roomId !== deletedId));
            setSelectedStudent(curr => curr?.roomId === deletedId ? null : curr);
@@ -352,9 +357,9 @@ export default function SessionPage() {
       const { data: firstMsgs } = await supabase
         .from('chat_messages')
         .select('room_id')
-        .in('room_id', rooms.map(r => r.id));
+        .in('room_id', (rooms as any[]).map((r: any) => r.id));
 
-      const activeRoomIds = new Set(firstMsgs?.map(m => m.room_id) || []);
+      const activeRoomIds = new Set((firstMsgs as any[] || []).map((m: any) => m.room_id) || []);
 
       const studentList = await Promise.all((rooms || [])
         .filter((room: any) => activeRoomIds.has(room.id) || room.id === targetRoomId) 
@@ -374,7 +379,7 @@ export default function SessionPage() {
             .is('read_at', null);
 
           const name = (Array.isArray(room.profiles) ? room.profiles[0] : room.profiles)?.full_name || 'Anonymous Student';
-          const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
+          const roomSchedules = (schedules as any[] || []).filter((s: any) => s.room_id === room.id);
           
           let subject = session?.help_requests?.subject;
           
@@ -386,7 +391,7 @@ export default function SessionPage() {
             
           let latestSignalTime = null;
           if (signalMsgs && signalMsgs.length > 0) {
-             const latestSystemMsg = signalMsgs.find(m => 
+             const latestSystemMsg = (signalMsgs as any[]).find((m: any) => 
                m.content.toLowerCase().includes('discussion started') || 
                m.content.toLowerCase().includes('signal ')
              );
@@ -422,16 +427,16 @@ export default function SessionPage() {
       
       if (studentList.length > 0) {
         if (targetRoomId) {
-          const target = studentList.find(s => s.roomId === targetRoomId);
+          const target = studentList.find((s: StudentProfile) => s.roomId === targetRoomId);
           if (target) setSelectedStudent(target);
         } else if (selectedStudent) {
-          const fresh = studentList.find(s => s.id === selectedStudent.id);
+          const fresh = studentList.find((s: StudentProfile) => s.id === selectedStudent.id);
           if (fresh) setSelectedStudent(fresh);
         }
       }
       
-      const mappedSlots = (schedules || []).map((s: any) => {
-        const matchingStudent = studentList.find(st => st.roomId === s.room_id);
+      const mappedSlots = (schedules as any[] || []).map((s: any) => {
+        const matchingStudent = studentList.find((st: StudentProfile) => st.roomId === s.room_id);
         return {
           id: s.id,
           studentName: matchingStudent?.name || 'Unknown',
@@ -459,8 +464,8 @@ export default function SessionPage() {
 
     const globalChannel = supabase
       .channel(`specialist-global-${currentUser.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-        const m = payload.new as any;
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload: { new: any }) => {
+        const m = payload.new;
         const currentStudents = studentsRef.current;
         const studentIndex = currentStudents.findIndex(s => s.roomId === m.room_id);
         if (studentIndex === -1) return;
@@ -549,8 +554,8 @@ export default function SessionPage() {
     channelRef.current = channel;
 
     channel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, (payload) => {
-        const m = payload.new as any;
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, (payload: { new: any, eventType: string }) => {
+        const m = payload.new;
         const type = payload.eventType;
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
@@ -579,8 +584,8 @@ export default function SessionPage() {
           });
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_class_messages' }, (payload) => {
-        const m = payload.new as any;
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_class_messages' }, (payload: { new: any, eventType: string }) => {
+        const m = payload.new;
         const type = payload.eventType;
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;

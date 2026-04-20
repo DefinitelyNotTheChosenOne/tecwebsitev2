@@ -112,7 +112,7 @@ export default function MessageTerminal() {
       });
 
       alert("CONGRATULATIONS: Mission Manifesto Initialized. Redirecting to Dashboard.");
-      router.push('/dashboard');
+      router.push('/seller');
     } catch (err: any) {
       alert("CRITICAL ERROR: " + err.message);
     } finally {
@@ -146,7 +146,7 @@ export default function MessageTerminal() {
       {/* Top Protocol Header */}
       <header className="fixed top-0 inset-x-0 h-20 bg-white/5 backdrop-blur-3xl border-b border-white/5 z-50 flex items-center justify-between px-10">
          <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="text-brand-secondary hover:text-white transition-all">
+            <Link href="/seller" className="text-brand-secondary hover:text-white transition-all">
                <ArrowLeft className="w-6 h-6" />
             </Link>
             <h1 className="text-xl font-black uppercase tracking-tight italic">Message <span className="text-brand-primary">Terminal</span></h1>

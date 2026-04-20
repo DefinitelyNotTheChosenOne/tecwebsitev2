@@ -55,7 +55,7 @@ export default function Home() {
       if (data.role === 'admin') {
         router.replace('/admin/dashboard');
       } else if (data.role === 'seller') {
-        router.replace('/dashboard');
+        router.replace('/seller');
       }
     }
   };
@@ -95,9 +95,9 @@ export default function Home() {
           {/* New High-Density Middle Nav */}
           <div className="hidden xl:flex items-center gap-8 text-[11px] font-black uppercase tracking-[2px] text-brand-secondary/80">
             <Link href="#markets" className="hover:text-white transition-colors">Subjects</Link>
-            <Link href={session ? "/help-wanted" : "/auth?mode=signup&redirect=/help-wanted"} className="hover:text-white transition-colors">Help Wanted</Link>
+            <Link href={session ? "/user/help-wanted" : "/auth?mode=signup&redirect=/user/help-wanted"} className="hover:text-white transition-colors">Help Wanted</Link>
             {session && profile?.role !== 'seller' && (
-              <Link href="/sessions" className="text-blue-400 hover:text-blue-300 transition-colors">My Sessions</Link>
+              <Link href="/user/sessions" className="text-blue-400 hover:text-blue-300 transition-colors">My Sessions</Link>
             )}
             {!session && (
               <Link href="/auth?mode=signup&redirect=/dashboard" className="text-brand-primary/60 hover:text-brand-primary transition-colors italic">Become a Tutor</Link>
@@ -126,7 +126,7 @@ export default function Home() {
                 className="flex items-center gap-6"
               >
                 <Link 
-                  href="/dashboard"
+                  href="/seller"
                   className="flex items-center gap-4 hover:opacity-70 transition-opacity cursor-pointer group bg-white/5 border border-white/10 p-2 pr-6 rounded-full"
                 >
                    <div className="w-10 h-10 rounded-full bg-brand-primary/20 border border-brand-primary/40 flex items-center justify-center overflow-hidden">
@@ -191,7 +191,7 @@ export default function Home() {
               <span className="text-brand-primary not-italic text-[10px] tracking-[5px] mb-2">Institutional Mastery</span>
               Browse Academic <span className="text-brand-primary">Markets</span>
             </h2>
-            <Link href="/subjects" className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
+            <Link href="/user/subjects" className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
                View Full Directory
             </Link>
           </div>
@@ -211,7 +211,7 @@ export default function Home() {
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
           >
           {(activeSubjects.length > 0 ? activeSubjects : fallbackSubjects).map((sub, i) => (
-            <Link key={i} href={session ? `/subjects/${sub.slug}` : `/auth?redirect=/subjects/${sub.slug}`}>
+            <Link key={i} href={session ? `/user/subjects/${sub.slug}` : `/auth?redirect=/user/subjects/${sub.slug}`}>
               <motion.div 
                 variants={{
                   hidden: { opacity: 0, scale: 0.9, y: 20 },

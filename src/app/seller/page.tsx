@@ -12,6 +12,32 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+// ─── Types ──────────────────────────────────────────────────────────────
+interface Profile {
+  id: string;
+  full_name: string;
+  role: 'user' | 'seller' | 'admin';
+  skills: string[];
+  avatar_url?: string;
+}
+
+interface HelpRequest {
+  id: string;
+  subject: string;
+  status: string;
+  student_id: string;
+  student?: { full_name: string };
+}
+
+interface Notification {
+  id: string;
+  title: string;
+  content: string;
+  type: string;
+  link?: string;
+  created_at: string;
+}
+
 const DashboardStyles = () => (
   <style jsx global>{`
     .signal-unread {
@@ -44,14 +70,14 @@ const DashboardStyles = () => (
 
 export default function UserDashboard() {
   const router = useRouter();
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isTutor, setIsTutor] = useState(false);
   const [loading, setLoading] = useState(true);
   const [completedSessions, setCompletedSessions] = useState<any[]>([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [myRequests, setMyRequests] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [recommendations, setRecommendations] = useState<HelpRequest[]>([]);
+  const [myRequests, setMyRequests] = useState<HelpRequest[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [readSignals, setReadSignals] = useState<Set<string>>(new Set());
   const [signalFilter, setSignalFilter] = useState<'MESSAGE' | 'REQUEST'>('MESSAGE');
   const [unreadCounts, setUnreadCounts] = useState<{MESSAGE: number, REQUEST: number}>({MESSAGE: 0, REQUEST: 0});
@@ -84,7 +110,7 @@ export default function UserDashboard() {
                 .in('subject', data.skills)
                 .limit(3)
                 .then(({ data: matches }) => {
-                  setRecommendations(matches || []);
+                  setRecommendations((matches as unknown as HelpRequest[]) || []);
                 });
             }
           }
@@ -96,19 +122,19 @@ export default function UserDashboard() {
           if (data?.role === 'user') {
              supabase.from('help_requests')
                .select('*')
-               .eq('student_id', user.id)
-               .then(({ data: reqs }) => {
-                  setMyRequests(reqs || []);
-               });
+                .eq('student_id', user.id)
+                .then(({ data: reqs }) => {
+                   setMyRequests((reqs as unknown as HelpRequest[]) || []);
+                });
           }
           
           supabase.from('tutoring_sessions')
             .select('*')
             .or(`tutor_id.eq.${user.id},student_id.eq.${user.id}`)
             .eq('status', 'completed')
-            .then(({ data }) => {
-              setCompletedSessions(data || []);
-              const total = data?.reduce((acc: number, curr: any) => acc + (Number(curr.agreed_price) || 0), 0);
+            .then(({ data: sessions }) => {
+              setCompletedSessions(sessions || []);
+              const total = (sessions || [])?.reduce((acc: number, curr: any) => acc + (Number(curr.agreed_price) || 0), 0);
               setTotalEarnings(total || 0);
             });
         } else {
@@ -136,11 +162,12 @@ export default function UserDashboard() {
       .order('created_at', { ascending: false })
       .limit(10);
     if (data) {
-      setNotifications(data);
+      const typedData = data as unknown as Notification[];
+      setNotifications(typedData);
       
       // Calculate initial unread counts for non-read signals
       const counts = { MESSAGE: 0, REQUEST: 0 };
-      data.forEach(n => {
+      typedData.forEach(n => {
         if (!readSignals.has(n.id)) {
           const tunnel = n.title?.toLowerCase().includes('tunnel');
           const sched = n.title?.toLowerCase().includes('schedule');
@@ -164,7 +191,7 @@ export default function UserDashboard() {
       table: 'notifications', 
       filter: `user_id=eq.${uid}` 
     }, (payload) => {
-      const newNotif = payload.new;
+      const newNotif = payload.new as Notification;
       setNotifications(prev => [newNotif, ...prev].slice(0, 10));
       
       const isReq = newNotif.type === 'REQUEST' || newNotif.title?.toLowerCase().includes('tunnel');
@@ -217,7 +244,7 @@ export default function UserDashboard() {
             </div>
           </motion.div>
           <div className="flex items-center gap-3">
-            <Link href={isTutor ? `/tutors/${profile?.id}` : "/subjects"} className="px-6 py-3.5 bg-brand-primary text-brand-dark rounded-xl font-black text-[9px] uppercase tracking-[2px] shadow-lg hover:bg-white hover:-translate-y-0.5 transition-all">
+            <Link href={isTutor ? `/user/tutors/${profile?.id}` : "/user/subjects"} className="px-6 py-3.5 bg-brand-primary text-brand-dark rounded-xl font-black text-[9px] uppercase tracking-[2px] shadow-lg hover:bg-white hover:-translate-y-0.5 transition-all">
               {isTutor ? 'Modify Dossier' : 'Browse'}
             </Link>
             <button onClick={handleSignOut} className="px-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-red-400 flex items-center gap-2 transition-all">
@@ -235,9 +262,9 @@ export default function UserDashboard() {
           <div className="lg:col-span-7 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[
-                { label: isTutor ? 'Market Hunt' : 'Post Mission', sub: isTutor ? 'Available Missions' : 'Recruit Experts', icon: BookOpen, color: 'indigo', href: isTutor ? '/help-wanted' : '/help-wanted/new' },
-                { label: isTutor ? 'My Bids' : 'Bids Received', sub: isTutor ? 'Active Proposals' : 'Inbound Signals', icon: Send, color: 'pink', href: isTutor ? '/bids' : '/dashboard' },
-                { label: 'Chat Terminal', sub: 'Secure Comms', icon: MessageSquare, color: 'emerald', href: isTutor ? '/dashboard/session' : '/sessions' }
+                { label: isTutor ? 'Market Hunt' : 'Post Mission', sub: isTutor ? 'Available Missions' : 'Recruit Experts', icon: BookOpen, color: 'indigo', href: isTutor ? '/user/help-wanted' : '/user/help-wanted/new' },
+                { label: isTutor ? 'My Bids' : 'Bids Received', sub: isTutor ? 'Active Proposals' : 'Inbound Signals', icon: Send, color: 'pink', href: isTutor ? '/user/bids' : '/seller' },
+                { label: 'Chat Terminal', sub: 'Secure Comms', icon: MessageSquare, color: 'emerald', href: isTutor ? '/seller/session' : '/user/sessions' }
               ].map((tile, i) => (
                 <Link key={i} href={tile.href}>
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-brand-primary/30 transition-all group overflow-hidden relative">
@@ -251,7 +278,7 @@ export default function UserDashboard() {
 
             {isTutor && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-                <Link href="/dashboard/missions" className="block group">
+                <Link href="/seller/missions" className="block group">
                   <div className="p-10 bg-brand-dark rounded-[3.5rem] border border-white/5 relative overflow-hidden shadow-2xl group-hover:border-brand-primary/50 transition-all">
                     <div className="absolute top-0 right-0 w-80 h-80 bg-brand-primary/20 blur-[100px] rounded-full translate-x-12 -translate-y-12" />
                     <div className="relative z-10 flex flex-col">
@@ -300,7 +327,7 @@ export default function UserDashboard() {
                             <div><h4 className="text-2xl font-black uppercase italic tracking-tighter text-brand-dark mb-1 leading-none">{req.subject}</h4><span className="px-2 py-0.5 bg-brand-primary/10 text-brand-primary text-[8px] font-black uppercase tracking-widest rounded">{req.status}</span></div>
                           </div>
                           <div className="flex gap-3">
-                             <Link href="/sessions" className="flex-[2] py-4 bg-brand-dark text-white rounded-2xl text-[9px] font-black text-center uppercase tracking-[2px] transition-all hover:bg-brand-primary hover:text-brand-dark">Enter Terminal</Link>
+                             <Link href="/user/sessions" className="flex-[2] py-4 bg-brand-dark text-white rounded-2xl text-[9px] font-black text-center uppercase tracking-[2px] transition-all hover:bg-brand-primary hover:text-brand-dark">Enter Terminal</Link>
                              <button onClick={async () => { const { error } = await supabase.from('help_requests').delete().eq('id', req.id); if (!error) setMyRequests(prev => prev.filter(r => r.id !== req.id)); }} className="flex-1 py-4 bg-red-500/5 text-red-500 border border-red-500/10 rounded-2xl text-[9px] font-black uppercase tracking-[2px] hover:bg-red-500 hover:text-white transition-all">Abort</button>
                           </div>
                         </motion.div>
@@ -330,7 +357,7 @@ export default function UserDashboard() {
                          </div>
                          <h4 className="text-xl font-black uppercase italic tracking-tighter text-brand-dark mb-1">{session.subject || 'General Mission'}</h4>
                          <p className="text-[9px] font-medium text-slate-400 uppercase tracking-[2px] mb-8">Archived: {new Date(session.created_at).toLocaleDateString()}</p>
-                         <Link href={`/dashboard/session?room=${session.room_id}`} className="w-full inline-block py-4 bg-slate-50 border border-slate-200 text-slate-500 rounded-2xl text-[9px] font-black text-center uppercase tracking-[2px] transition-all hover:bg-brand-dark hover:text-white shadow-sm">Reveal Chat Logs</Link>
+                         <Link href={`/seller/session?room=${session.room_id}`} className="w-full inline-block py-4 bg-slate-50 border border-slate-200 text-slate-500 rounded-2xl text-[9px] font-black text-center uppercase tracking-[2px] transition-all hover:bg-brand-dark hover:text-white shadow-sm">Reveal Chat Logs</Link>
                       </motion.div>
                     ))
                   )}
@@ -402,8 +429,9 @@ export default function UserDashboard() {
                         }`}
                         onClick={() => {
                           setReadSignals(prev => new Set([...prev, notif.id]));
-                          if (notif.type === 'REQUEST' || isHandshake) router.push('/dashboard/missions');
-                          else if (isTimeSignal) router.push('/sessions');
+                          if (notif.type === 'REQUEST' || isHandshake) router.push('/seller/missions');
+                          else if (notif.link?.startsWith('/dashboard/session')) router.push(notif.link.replace('/dashboard/session', '/seller/session'));
+                          else if (isTimeSignal) router.push('/user/sessions');
                           else if (notif.link) router.push(notif.link);
                         }}
                       >
@@ -436,7 +464,7 @@ export default function UserDashboard() {
                <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full translate-x-12 -translate-y-12 transition-transform group-hover:scale-150" />
                <h3 className="text-[10px] font-black uppercase tracking-[5px] text-slate-400 mb-6 flex items-center gap-3"><ShieldCheck className="w-4 h-4 text-brand-primary" /> Dossier Support</h3>
                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed mb-8 italic opacity-60">Need clearance for session payments or verify specialized credentials?</p>
-               <Link href="/support" className="w-full py-5 bg-slate-50 border border-slate-200 rounded-3xl block text-center font-black text-[9px] uppercase tracking-[3px] text-slate-400 hover:bg-brand-dark hover:text-white transition-all shadow-sm">Open Support Signal</Link>
+               <Link href="/user/support" className="w-full py-5 bg-slate-50 border border-slate-200 rounded-3xl block text-center font-black text-[9px] uppercase tracking-[3px] text-slate-400 hover:bg-brand-dark hover:text-white transition-all shadow-sm">Open Support Signal</Link>
             </div>
           </div>
         </div>

@@ -51,8 +51,8 @@ function AuthContent() {
         }
       }
 
-      // Redirect immediately
-      let destination = '/dashboard';
+      // Redirect to root, which handles role-based routing to new /seller or /user paths
+      let destination = '/'; 
       if (redirect) {
         destination = `${redirect}${redirect.includes('?') ? '&' : '?'}redirected=true`;
       }

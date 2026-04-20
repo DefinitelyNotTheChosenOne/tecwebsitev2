@@ -136,7 +136,7 @@ export default function AdminDashboardPage() {
           <ArrowRight className="w-6 h-6 text-brand-secondary" />
         </Link>
 
-        <Link href="/support" className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] flex items-center justify-between group backdrop-blur-xl hover:bg-white/10 transition-all">
+        <Link href="/user/support" className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] flex items-center justify-between group backdrop-blur-xl hover:bg-white/10 transition-all">
           <div className="flex items-center gap-6">
             <div className="w-16 h-16 bg-brand-primary/20 rounded-2xl flex items-center justify-center">
                <MessageSquare className="w-8 h-8 text-brand-primary" />

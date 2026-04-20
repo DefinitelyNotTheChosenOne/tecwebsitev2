@@ -60,7 +60,7 @@ export default function BidTrackingTerminal() {
       
       <header className="max-w-6xl mx-auto mb-20 flex flex-col md:flex-row md:items-end justify-between gap-10 relative z-10">
          <div>
-            <Link href="/dashboard" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group mb-6">
+            <Link href="/" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group mb-6">
                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1" /> Dashboard
             </Link>
             <h1 className="text-6xl font-black tracking-tighter uppercase italic leading-[0.9]">Outgoing <span className="text-brand-primary block not-italic font-black">Offer Terminal</span></h1>
@@ -122,7 +122,7 @@ export default function BidTrackingTerminal() {
               <XCircle className="w-20 h-20 text-zinc-800 mx-auto mb-8 opacity-20" />
               <h2 className="text-4xl font-black uppercase text-zinc-700 italic text-white/20">No active offers manifested</h2>
               <p className="text-brand-secondary font-medium uppercase tracking-[5px] text-[10px] mt-4">Your mission grid is empty. Hunt for students to grow your pipeline.</p>
-              <Link href="/help-wanted" className="mt-10 inline-block px-10 py-5 bg-brand-primary text-brand-dark rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl active:scale-95 transition-all">
+              <Link href="/user/help-wanted" className="mt-10 inline-block px-10 py-5 bg-brand-primary text-brand-dark rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl active:scale-95 transition-all">
                  Manifest Your First Bid
               </Link>
            </div>

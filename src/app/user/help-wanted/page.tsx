@@ -49,7 +49,7 @@ export default function MarketplaceDiscovery() {
       
       <header className="max-w-7xl mx-auto mb-16 flex flex-col md:flex-row md:items-end justify-between gap-10 relative z-10">
          <div>
-            <Link href="/dashboard" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group mb-6">
+            <Link href="/" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group mb-6">
                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1" /> Dashboard
             </Link>
             <h1 className="text-6xl font-black tracking-tighter uppercase italic leading-[0.9]">Marketplace <span className="text-brand-primary block not-italic font-black">Discovery Hub</span></h1>

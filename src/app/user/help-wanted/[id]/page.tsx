@@ -89,7 +89,7 @@ export default function BiddingTerminal() {
     <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-12 text-center">
        <ShieldAlert className="w-20 h-20 text-red-500 mb-8 opacity-20" />
        <h1 className="text-4xl font-black uppercase text-white/40 italic">Mission Dossier Not Found</h1>
-       <Link href="/help-wanted" className="mt-8 text-brand-primary font-black uppercase tracking-widest text-[10px]">Return to Grid</Link>
+       <Link href="/user/help-wanted" className="mt-8 text-brand-primary font-black uppercase tracking-widest text-[10px]">Return to Grid</Link>
     </div>
   );
 
@@ -99,7 +99,7 @@ export default function BiddingTerminal() {
       <div className="fixed inset-0 pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900 via-transparent to-transparent scale-[2] blur-3xl animate-pulse" />
 
       <header className="max-w-6xl mx-auto mb-16 relative z-10">
-         <Link href="/help-wanted" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group mb-6">
+         <Link href="/user/help-wanted" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group mb-6">
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1" /> Back to Grid
          </Link>
          <div className="flex flex-col md:flex-row items-end justify-between gap-10">
@@ -195,7 +195,7 @@ export default function BiddingTerminal() {
                      <p className="text-sm font-black text-green-500 uppercase tracking-widest leading-loose max-w-sm">
                         You have committed ₱{existingBid.proposed_rate}/hr to this mission. Stand by for student intelligence.
                      </p>
-                     <Link href="/bids" className="mt-8 px-10 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 transition-all inline-block">Audit Your Offers</Link>
+                     <Link href="/user/bids" className="mt-8 px-10 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 transition-all inline-block">Audit Your Offers</Link>
                   </motion.section>
                )}
             </AnimatePresence>

@@ -25,7 +25,7 @@ export default function PostHelpRequest() {
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-brand-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="max-w-3xl mx-auto relative z-10">
-        <Link href="/dashboard" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-colors mb-12 font-bold text-sm tracking-wide group">
+        <Link href="/" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-colors mb-12 font-bold text-sm tracking-wide group">
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Back to Dashboard
         </Link>
 

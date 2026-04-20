@@ -101,7 +101,7 @@ export default function ProfileEditor() {
       <div className="bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-50 backdrop-blur-xl bg-white/90">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link 
-            href="/dashboard" 
+            href="/seller" 
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-brand-dark transition-colors group"
           >
             <ChevronLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" /> 

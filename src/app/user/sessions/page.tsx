@@ -114,7 +114,16 @@ const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: {
 MessageStatusIcon.displayName = 'MessageStatusIcon';
 
 // ─── Shared Components ──────────────────────────────────────────────
-const ChatBubble = memo(({ msg, tutorInitial, tutorAvatar, isReportingMode, isSelected, toggleSelect, onVisible, showStatus }: any) => {
+const ChatBubble = memo(({ msg, tutorInitial, tutorAvatar, isReportingMode, isSelected, toggleSelect, onVisible, showStatus }: { 
+  msg: Message; 
+  tutorInitial?: string; 
+  tutorAvatar?: string; 
+  isReportingMode: boolean; 
+  isSelected: boolean; 
+  toggleSelect?: (id: string) => void; 
+  onVisible?: (id: string) => void; 
+  showStatus?: boolean; 
+}) => {
   const bubbleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -160,7 +169,12 @@ const ChatBubble = memo(({ msg, tutorInitial, tutorAvatar, isReportingMode, isSe
 
 ChatBubble.displayName = 'ChatBubble';
 
-const ChatInput = ({ value, onChange, onSend, placeholder }: any) => (
+const ChatInput = ({ value, onChange, onSend, placeholder }: { 
+  value: string; 
+  onChange: (val: string) => void; 
+  onSend: () => void; 
+  placeholder?: string; 
+}) => (
   <div className="flex items-center gap-4 bg-white border border-slate-200 p-2 rounded-2xl shadow-lg ring-1 ring-slate-100 mt-auto">
     <input 
       type="text" 
@@ -207,7 +221,7 @@ export default function StudentSessionsPage() {
   const sessionsRef = useRef<TutorSession[]>([]);
   const [isTutorOnlineBackup, setIsTutorOnlineBackup] = useState(false); // Deprecated
   const tutorOnlineRef = useRef(false);
-  const typingTimeoutRef = useRef<any>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // ─── Robust Presence System ──────────────────────────────────────
   const { 
@@ -271,7 +285,7 @@ export default function StudentSessionsPage() {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
       setProfile(prof);
       
-      if (prof?.role === 'seller') { router.replace('/dashboard'); return; }
+      if (prof?.role === 'seller') { router.replace('/seller'); return; }
 
       await fetchSessions(session.user.id);
     };
@@ -292,7 +306,7 @@ export default function StudentSessionsPage() {
       if (!rooms || rooms.length === 0) { setLoading(false); return; }
 
       // Fetch scheduled classes for all rooms
-      const roomIds = rooms.map(r => r.id);
+      const roomIds = (rooms as any[]).map((r: any) => r.id);
       const { data: schedules } = await supabase
         .from('scheduled_classes')
         .select('*')
@@ -369,8 +383,8 @@ export default function StudentSessionsPage() {
         event: 'INSERT',
         schema: 'public',
         table: 'chat_messages'
-      }, (payload) => {
-        const m = payload.new as any;
+      }, (payload: { new: any }) => {
+        const m = payload.new;
         const currentSessions = sessionsRef.current;
         const sessionIndex = currentSessions.findIndex(s => s.roomId === m.room_id);
         if (sessionIndex === -1) return;
@@ -390,7 +404,7 @@ export default function StudentSessionsPage() {
           return newList;
         });
       })
-      .on('broadcast', { event: 'new_message' }, (payload) => {
+      .on('broadcast', { event: 'new_message' }, (payload: { payload: any }) => {
         const m = payload.payload;
         const currentSessions = sessionsRef.current;
         const sessionIndex = currentSessions.findIndex(s => s.roomId === m.room_id);
@@ -495,8 +509,8 @@ export default function StudentSessionsPage() {
     channelRef.current = channel;
 
     channel
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-        const m = payload.new as any;
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload: { new: any }) => {
+        const m = payload.new;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
@@ -514,8 +528,8 @@ export default function StudentSessionsPage() {
         });
       })
       // ── KEY FIX: Listen for UPDATE events so seen status propagates instantly ──
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' }, (payload) => {
-        const m = payload.new as any;
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' }, (payload: { new: any }) => {
+        const m = payload.new;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
@@ -523,7 +537,7 @@ export default function StudentSessionsPage() {
         const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent';
         setMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
-      .on('broadcast', { event: 'new_message' }, (payload) => {
+      .on('broadcast', { event: 'new_message' }, (payload: { payload: any }) => {
         const m = payload.payload;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
@@ -534,8 +548,8 @@ export default function StudentSessionsPage() {
           return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status } as Message];
         });
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload) => {
-        const m = payload.new as any;
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload: { new: any }) => {
+        const m = payload.new;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
@@ -544,8 +558,8 @@ export default function StudentSessionsPage() {
           return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: m.sender_id === user?.id ? 'sent' : undefined } as Message];
         });
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'live_class_messages' }, (payload) => {
-        const m = payload.new as any;
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'live_class_messages' }, (payload: { new: any }) => {
+        const m = payload.new;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
@@ -553,7 +567,7 @@ export default function StudentSessionsPage() {
         const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent';
         setClassMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
-      .on('broadcast', { event: 'new_class_message' }, (payload) => {
+      .on('broadcast', { event: 'new_class_message' }, (payload: { payload: any }) => {
         const m = payload.payload;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
@@ -564,7 +578,7 @@ export default function StudentSessionsPage() {
         });
       })
       // ── Tutor read our messages → upgrade to Seen ─────────────────────
-      .on('broadcast', { event: 'messages_read' }, ({ payload }) => {
+      .on('broadcast', { event: 'messages_read' }, ({ payload }: { payload: any }) => {
         const sess = selectedSessionRef.current;
         if (!sess || payload.roomId !== sess.roomId) return;
         
@@ -849,8 +863,8 @@ export default function StudentSessionsPage() {
         <p className="text-sm text-slate-400 font-medium leading-relaxed">You haven't connected with any tutors yet. Browse subjects or post a help request to get started.</p>
       </div>
       <div className="flex gap-3 mt-4">
-        <Link href="/subjects" className="px-6 py-3 bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all">Browse Subjects</Link>
-        <Link href="/help-wanted" className="px-6 py-3 bg-white border border-slate-200 text-brand-dark rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all">Post Request</Link>
+        <Link href="/user/subjects" className="px-6 py-3 bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all">Browse Subjects</Link>
+        <Link href="/user/help-wanted" className="px-6 py-3 bg-white border border-slate-200 text-brand-dark rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all">Post Request</Link>
       </div>
     </div>
   );
@@ -875,7 +889,7 @@ export default function StudentSessionsPage() {
               <div className={`w-2 h-2 rounded-full ${onlineStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} title={`System: ${onlineStatus}`}></div>
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/dashboard" className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">
+              <Link href="/" className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">
                 <ChevronLeft className="w-4 h-4 text-slate-500" />
               </Link>
               <button onClick={() => setSidebarOpen(false)} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all md:hidden">
@@ -1216,7 +1230,18 @@ export default function StudentSessionsPage() {
                       </div>
                     </div>
                      <div className="flex-1 overflow-y-auto space-y-6 md:space-y-6 pr-4 custom-scroll">
-                      {classMessages.map(m => <ChatBubble key={m.id} msg={m} tutorInitial={selectedSession?.tutorInitial || 'T'} tutorAvatar={selectedSession?.tutorAvatar} onVisible={markClassAsRead} />)}
+                      {classMessages.map(m => (
+                        <ChatBubble 
+                          key={m.id} 
+                          msg={m} 
+                          tutorInitial={selectedSession?.tutorInitial || 'T'} 
+                          tutorAvatar={selectedSession?.tutorAvatar} 
+                          isReportingMode={false}
+                          isSelected={false}
+                          onVisible={markClassAsRead} 
+                          showStatus={m.sender === 'student' && m.id === (classMessages.filter(msg => msg.sender === 'student' && msg.status === 'seen').pop()?.id || classMessages.filter(msg => msg.sender === 'student' && msg.status === 'delivered').pop()?.id || classMessages.filter(msg => msg.sender === 'student' && (msg.status === 'sent' || msg.status === 'sending')).pop()?.id)}
+                        />
+                      ))}
                       <div ref={classBottomRef} />
                     </div>
                     <ChatInput value={classInput} onChange={setClassInput} onSend={sendClassMsg} placeholder="Ask a question..." />

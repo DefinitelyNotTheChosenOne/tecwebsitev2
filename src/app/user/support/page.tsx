@@ -102,7 +102,7 @@ export default function CustomerSupportPage() {
                 animate={{ opacity: 1, x: 0 }}
               >
                 <Link 
-                  href={profile?.role === 'admin' ? "/admin/dashboard" : "/dashboard"} 
+                  href={profile?.role === 'admin' ? "/admin/dashboard" : "/"} 
                   className="flex items-center gap-3 text-brand-secondary hover:text-white transition-all group"
                 >
                   <ArrowLeft className="w-5 h-5 group-hover:-translate-x-2 transition-transform" />

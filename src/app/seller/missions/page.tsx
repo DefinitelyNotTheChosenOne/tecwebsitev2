@@ -219,14 +219,14 @@ export default function SpecialistMissionBoard() {
       type: 'MESSAGE',
       title: 'Handshake Accepted',
       content: `Specialist ${profile.full_name} has authorized the tunnel. Enter Discussion.`,
-      link: '/sessions'
+      link: '/user/sessions'
     });
 
     // 5. Navigate to session
     if (room) {
-      router.push(`/dashboard/session?room=${room.id}`);
+      router.push(`/seller/session?room=${room.id}`);
     } else {
-      router.push('/dashboard/session');
+      router.push('/seller/session');
     }
   };
 
@@ -245,7 +245,7 @@ export default function SpecialistMissionBoard() {
             type: 'MESSAGE',
             title: 'Handshake Declined',
             content: `Specialist ${profile.full_name} is unavailable. Try another market.`,
-            link: '/subjects'
+            link: '/user/subjects'
           });
 
           setMissions(prev => prev.filter(m => m.id !== mission.id));
@@ -286,7 +286,7 @@ export default function SpecialistMissionBoard() {
         </AnimatePresence>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-brand-primary/10 via-transparent to-transparent opacity-50" />
         <div className="max-w-6xl mx-auto relative z-10">
-          <Link href="/dashboard" className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[3px] text-white/40 hover:text-brand-primary transition-colors mb-8 group">
+          <Link href="/seller" className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[3px] text-white/40 hover:text-brand-primary transition-colors mb-8 group">
             <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Dashboard
           </Link>
           <div className="flex flex-col md:flex-row justify-between md:items-end gap-6">
