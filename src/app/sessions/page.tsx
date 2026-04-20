@@ -174,24 +174,31 @@ export default function StudentSessionsPage() {
         .in('room_id', roomIds)
         .order('class_date', { ascending: true });
 
-      // Check which rooms have tutor messages (= tutor accepted/engaged)
-      const { data: tutorMessages } = await supabase
+      // Check which rooms have signals to extract subjects
+      const { data: allMessages } = await supabase
         .from('chat_messages')
-        .select('room_id, sender_id')
-        .in('room_id', roomIds);
+        .select('room_id, sender_id, content')
+        .in('room_id', roomIds)
+        .order('created_at', { ascending: true });
 
       const sessionList: TutorSession[] = rooms.map((room: any) => {
         const tutorProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
         const name = tutorProfile?.full_name || 'Tutor';
         const roomSchedules = (schedules || []).filter(s => s.room_id === room.id);
-        const hasTutorResponse = (tutorMessages || []).some(m => m.room_id === room.id && m.sender_id === room.tutor_id);
+        const roomMessages = (allMessages || []).filter(m => m.room_id === room.id);
+        const hasTutorResponse = roomMessages.some(m => m.sender_id === room.tutor_id);
+
+        const initiationMsg = roomMessages.find(m => m.content.startsWith('SIGNAL INITIATED:'));
+        const extractedSubject = initiationMsg 
+          ? initiationMsg.content.match(/requesting a (.+) session/)?.[1] || 'General Session'
+          : 'General Session';
 
         return {
           id: room.tutor_id,
           roomId: room.id,
           tutorName: name,
           tutorInitial: name.charAt(0).toUpperCase(),
-          subject: roomSchedules.length > 0 ? 'Scheduled' : 'Pending',
+          subject: extractedSubject,
           status: hasTutorResponse ? 'accepted' : 'pending',
           lastMsg: '...',
           lastActive: 'Now',
@@ -575,8 +582,11 @@ export default function StudentSessionsPage() {
                   <p className="text-sm font-black uppercase italic truncate text-brand-dark">{s.tutorName}</p>
                   <span className="text-[8px] font-bold text-slate-300 uppercase shrink-0">{s.lastActive}</span>
                 </div>
-                <p className={`text-[10px] font-bold uppercase tracking-widest truncate leading-none ${s.status === 'accepted' ? 'text-emerald-500' : s.status === 'declined' ? 'text-red-400' : 'text-amber-500'}`}>
-                  {s.status === 'accepted' ? (s.scheduledClasses.length > 0 ? 'Class Scheduled' : 'Tutor Engaged') : s.status === 'declined' ? 'Declined' : 'Awaiting Response'}
+                <p className={`text-[10px] font-black uppercase tracking-widest truncate leading-none ${s.status === 'accepted' ? 'text-emerald-500' : s.status === 'declined' ? 'text-red-400' : 'text-amber-500'}`}>
+                  {s.status === 'accepted' ? (s.scheduledClasses.length > 0 ? 'Class Ongoing' : 'Discussion') : s.status === 'declined' ? 'Declined' : 'Awaiting Response'}
+                </p>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1.5 truncate leading-none">
+                  {s.subject}
                 </p>
               </div>
             </button>
