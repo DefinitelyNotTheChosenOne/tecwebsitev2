@@ -131,6 +131,7 @@ export default function SessionPage() {
   const discBottomRef = useRef<HTMLDivElement>(null);
   const classBottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<any>(null);
+  const syncChannelRef = useRef<any>(null);
   const selectedStudentRef = useRef<StudentProfile | null>(null);
   const currentUserRef = useRef<any>(null);
   const [isStudentTyping, setIsStudentTyping] = useState(false);
@@ -182,17 +183,18 @@ export default function SessionPage() {
 
     const interval = setInterval(() => setNow(new Date()), 1000);
 
-    // REAL-TIME PURGE SYNC: Detect deletions from other devices
-    // UNIQUE IDENTITY: We append a random ID to prevent conflicts during React re-renders
-    const syncChannelId = `global-purge-sync-${Math.random().toString(36).substring(7)}`;
-    const syncChannel = supabase.channel(syncChannelId)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_rooms' }, (payload) => {
-         const deletedId = payload.old.id;
-         setStudents(prev => prev.filter(s => s.roomId !== deletedId));
-         setSelectedStudent(curr => curr?.roomId === deletedId ? null : curr);
-      });
-    
-    syncChannel.subscribe();
+    // REAL-TIME PURGE SYNC: Singleton pattern — only create once, never re-create on re-render
+    if (!syncChannelRef.current) {
+      const syncChannel = supabase
+        .channel(`purge-sync-${Math.random().toString(36).substring(7)}`)
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_rooms' }, (payload) => {
+           const deletedId = payload.old.id;
+           setStudents(prev => prev.filter(s => s.roomId !== deletedId));
+           setSelectedStudent(curr => curr?.roomId === deletedId ? null : curr);
+        });
+      syncChannel.subscribe();
+      syncChannelRef.current = syncChannel;
+    }
 
     // Anti-Snoop Protocol
     const handleContext = (e: MouseEvent) => {
@@ -211,7 +213,10 @@ export default function SessionPage() {
 
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(syncChannel);
+      if (syncChannelRef.current) {
+        supabase.removeChannel(syncChannelRef.current);
+        syncChannelRef.current = null;
+      }
       window.removeEventListener('contextmenu', handleContext);
       window.removeEventListener('keydown', handleKeydown);
     };
