@@ -27,7 +27,8 @@ const ScrollStyles = () => (
 );
 
 // ─── Types ──────────────────────────────────────────────────────────────
-type Message = { id: number; sender: 'tutor' | 'student'; text: string; time: string };
+type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen';
+type Message = { id: number | string; sender: 'tutor' | 'student'; text: string; time: string; status?: MessageStatus; };
 type ClassSlot = {
   id: number;
   studentName: string;
@@ -67,6 +68,24 @@ const fmtTime = (t: string) => {
 type Tab = 'discussion' | 'schedule' | 'class';
 const MAX_CLASSES = 5;
 
+// ─── Message Status Icon ────────────────────────────────────────────────
+const MessageStatusIcon = ({ status, recipientInitial }: { status?: MessageStatus; recipientInitial?: string }) => {
+  if (!status) return null;
+  if (status === 'sending') return <div className="w-3 h-3 rounded-full border-2 border-slate-300/60 shrink-0" />;
+  if (status === 'sent')     return <div className="w-3 h-3 rounded-full border-2 border-blue-400 shrink-0" />;
+  if (status === 'delivered') return (
+    <div className="w-3 h-3 rounded-full bg-slate-400 flex items-center justify-center shrink-0">
+      <svg className="w-1.5 h-1.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+    </div>
+  );
+  if (status === 'seen') return (
+    <div className="w-3.5 h-3.5 rounded-full bg-blue-500 flex items-center justify-center text-[7px] font-black text-white shrink-0">
+      {(recipientInitial || 'S').charAt(0)}
+    </div>
+  );
+  return null;
+};
+
 // ─── Shared Components ──────────────────────────────────────────────
 const ChatBubble = ({ msg, selectedStudent }: { msg: Message, selectedStudent: StudentProfile | null }) => (
   <div className={`flex gap-3 ${msg.sender === 'tutor' ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -75,7 +94,10 @@ const ChatBubble = ({ msg, selectedStudent }: { msg: Message, selectedStudent: S
     </div>
     <div className={`max-w-[75%] ${msg.sender === 'tutor' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
       <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'tutor' ? 'bg-brand-dark text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
-      <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
+        {msg.sender === 'tutor' && <MessageStatusIcon status={msg.status} recipientInitial={selectedStudent?.initial} />}
+      </div>
     </div>
   </div>
 );
@@ -138,6 +160,7 @@ export default function SessionPage() {
   const studentsRef = useRef<StudentProfile[]>([]);
   const [isStudentTyping, setIsStudentTyping] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED' | 'OFFLINE'>('CONNECTING');
+  const [isStudentOnline, setIsStudentOnline] = useState(false);
   const typingTimeoutRef = useRef<any>(null);
 
   const deleteSession = async (roomId: string, studentName: string) => {
@@ -417,7 +440,6 @@ export default function SessionPage() {
         const existingIds = new Set(existing.filter(m => !String(m.id).startsWith('opt-')).map(m => m.id));
         const newOnes = fetched.filter(m => !existingIds.has(m.id));
         if (newOnes.length === 0) return prev;
-        // Merge and sort by UUID (UUIDs are time-ordered in postgres)
         const merged = [...existing.filter(m => String(m.id).startsWith('opt-')), ...fetched];
         return { ...prev, [selectedStudent.id]: merged };
       });
@@ -439,7 +461,11 @@ export default function SessionPage() {
             id: m.id,
             sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
             text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            // Compute status from DB columns for tutor's own messages
+            status: m.sender_id === currentUser?.id
+              ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent') as MessageStatus
+              : undefined
           }));
         mergeDiscMsgs(mapped);
       }
@@ -455,7 +481,10 @@ export default function SessionPage() {
           id: m.id,
           sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
           text: m.content,
-          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: m.sender_id === currentUser?.id
+            ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent') as MessageStatus
+            : undefined
         }));
         setAllClassMsgs(prev => {
           const existing = prev[selectedStudent.id] || [];
@@ -467,25 +496,16 @@ export default function SessionPage() {
       }
     };
 
-    // Initial fetch
     fetchMsgs();
-
-    // Polling fallback: fires every 2.5s to simulate realtime while RLS is being configured
     const pollInterval = setInterval(fetchMsgs, 2500);
 
     const channel = supabase.channel(`session:${selectedStudent.roomId}`, {
-      config: {
-        broadcast: { ack: true },
-      },
+      config: { broadcast: { ack: true } },
     });
     channelRef.current = channel;
 
     channel
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chat_messages'
-      }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
         const m = payload.new as any;
         console.log("[REALTIME] Incoming Message Row:", m);
         const student = selectedStudentRef.current;
@@ -500,16 +520,13 @@ export default function SessionPage() {
             id: m.id,
             sender: m.sender_id === user?.id ? 'tutor' : 'student',
             text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: m.sender_id === user?.id ? 'sent' : undefined
           };
           return { ...prev, [student.id]: [...studentMsgs, msg] };
         });
       })
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'live_class_messages'
-      }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_class_messages' }, (payload) => {
         const m = payload.new as any;
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
@@ -521,7 +538,8 @@ export default function SessionPage() {
             id: m.id,
             sender: m.sender_id === user?.id ? 'tutor' : 'student',
             text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: m.sender_id === user?.id ? 'sent' : undefined
           };
           return { ...prev, [student.id]: [...studentMsgs, msg] };
         });
@@ -538,7 +556,8 @@ export default function SessionPage() {
             id: m.id,
             sender: m.sender_id === user?.id ? 'tutor' : 'student',
             text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: m.sender_id === user?.id ? 'sent' : undefined
           };
           return { ...prev, [student.id]: [...studentMsgs, msg] };
         });
@@ -555,34 +574,87 @@ export default function SessionPage() {
             id: m.id,
             sender: m.sender_id === user?.id ? 'tutor' : 'student',
             text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: m.sender_id === user?.id ? 'sent' : undefined
           };
           return { ...prev, [student.id]: [...studentMsgs, msg] };
         });
       })
+      // ── Student read their messages → upgrade to Seen ──────────────
+      .on('broadcast', { event: 'messages_read' }, ({ payload }) => {
+        const student = selectedStudentRef.current;
+        if (!student) return;
+        setAllDiscMsgs(prev => {
+          const msgs = prev[student.id] || [];
+          return { ...prev, [student.id]: msgs.map(m => m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m) };
+        });
+        setAllClassMsgs(prev => {
+          const msgs = prev[student.id] || [];
+          return { ...prev, [student.id]: msgs.map(m => m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m) };
+        });
+      })
+      // ── Presence: detect if student is online → upgrade to Delivered ─
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const user = currentUserRef.current;
-        const otherTyping = Object.values(state).flat().some((u: any) => u.user_id !== user?.id && u.typing);
+        const others = Object.values(state).flat() as any[];
+        const studentOnline = others.some((u: any) => u.user_id !== user?.id);
+        setIsStudentOnline(studentOnline);
+        if (studentOnline) {
+          const student = selectedStudentRef.current;
+          if (student) {
+            setAllDiscMsgs(prev => {
+              const msgs = prev[student.id] || [];
+              const upgraded = msgs.map(m => m.sender === 'tutor' && m.status === 'sent' ? { ...m, status: 'delivered' as MessageStatus } : m);
+              return { ...prev, [student.id]: upgraded };
+            });
+            setAllClassMsgs(prev => {
+              const msgs = prev[student.id] || [];
+              const upgraded = msgs.map(m => m.sender === 'tutor' && m.status === 'sent' ? { ...m, status: 'delivered' as MessageStatus } : m);
+              return { ...prev, [student.id]: upgraded };
+            });
+          }
+        }
+        const otherTyping = others.some((u: any) => u.user_id !== user?.id && u.typing);
         setIsStudentTyping(otherTyping);
       })
       .subscribe(async (status) => {
         console.log(`[REALTIME] Status change: ${status} for Room: ${selectedStudent.roomId}`);
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('CONNECTED');
-          await channel.track({ user_id: currentUserRef.current?.id, typing: false });
+          await channel.track({ user_id: currentUserRef.current?.id, typing: false, chat_active: true });
         } else {
           setConnectionStatus('OFFLINE');
         }
       });
 
-    return () => { 
+    return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       clearInterval(pollInterval);
-      supabase.removeChannel(channel); 
+      supabase.removeChannel(channel);
       channelRef.current = null;
     };
   }, [selectedStudent?.roomId, currentUser?.id]);
+
+  // ── Mark messages as read when Tutor opens the Discussion tab ──────
+  useEffect(() => {
+    if (activeTab !== 'discussion' || !selectedStudent?.roomId || !currentUser?.id) return;
+    // Update read_at in DB for all student messages in this room
+    supabase
+      .from('chat_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('room_id', selectedStudent.roomId)
+      .neq('sender_id', currentUser.id)
+      .is('read_at', null)
+      .then(() => {
+        // Notify the student that their messages have been seen
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'messages_read',
+          payload: { room_id: selectedStudent.roomId }
+        });
+      });
+  }, [activeTab, selectedStudent?.id]);
 
   const handleTyping = () => {
     if (!channelRef.current) return;
@@ -715,50 +787,38 @@ export default function SessionPage() {
 
   const sendDiscMsg = async () => {
     if (!discInput.trim() || !selectedStudent?.roomId || !currentUser) return;
-    const content = discInput.trim(); 
+    const content = discInput.trim();
     setDiscInput('');
 
-    // Optimistic update — show immediately without waiting for realtime echo
     const optimisticId = `opt-${Date.now()}`;
     const optimisticMsg: Message = {
-      id: optimisticId as any,
+      id: optimisticId,
       sender: 'tutor',
       text: content,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      status: 'sending'
     };
-    setAllDiscMsgs(prev => ({
-      ...prev,
-      [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optimisticMsg]
-    }));
+    setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optimisticMsg] }));
 
-    const { data, error } = await supabase.from('chat_messages').insert({ 
-      room_id: selectedStudent.roomId, 
-      sender_id: currentUser.id, 
-      content 
+    const { data, error } = await supabase.from('chat_messages').insert({
+      room_id: selectedStudent.roomId,
+      sender_id: currentUser.id,
+      content
     }).select().single();
 
     if (error) {
       console.error("Signal Failed:", error.message);
-      // Rollback optimistic message on failure
-      setAllDiscMsgs(prev => ({
-        ...prev,
-        [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== (optimisticId as any))
-      }));
+      setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== optimisticId) }));
     } else if (data) {
-      // Direct Broadcast Fallback: Send message directly through websocket in case Postgres replication lags
       if (channelRef.current) {
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'new_message',
-          payload: data
-        });
+        channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
       }
-      
-      // Replace optimistic ID with real DB ID to prevent duplicates from realtime echo
+      // Replace optimistic with real record, mark as 'sent' (or 'delivered'/'seen' if student already online)
+      const finalStatus: MessageStatus = isStudentOnline ? 'delivered' : 'sent';
       setAllDiscMsgs(prev => ({
         ...prev,
-        [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => 
-          m.id === (optimisticId as any) ? { ...m, id: data.id } : m
+        [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m =>
+          m.id === optimisticId ? { ...m, id: data.id, status: finalStatus } : m
         )
       }));
     }
@@ -766,21 +826,18 @@ export default function SessionPage() {
 
   const sendClassMsg = async () => {
     if (!classInput.trim() || isClassLocked() || !selectedStudent || !currentUser) return;
-    const content = classInput.trim(); 
+    const content = classInput.trim();
     setClassInput('');
 
-    // Optimistic update
     const optimisticId = `opt-${Date.now()}`;
     const optimisticMsg: Message = {
-      id: optimisticId as any,
+      id: optimisticId,
       sender: 'tutor',
       text: content,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      status: 'sending'
     };
-    setAllClassMsgs(prev => ({
-      ...prev,
-      [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optimisticMsg]
-    }));
+    setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), optimisticMsg] }));
 
     const { data, error } = await supabase.from('live_class_messages').insert({
       room_id: selectedStudent.roomId,
@@ -790,24 +847,16 @@ export default function SessionPage() {
 
     if (error) {
       console.error("Signal Failed:", error.message);
-      setAllClassMsgs(prev => ({
-        ...prev,
-        [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== (optimisticId as any))
-      }));
+      setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).filter(m => m.id !== optimisticId) }));
     } else if (data) {
-      // Direct Broadcast Fallback
       if (channelRef.current) {
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'new_class_message',
-          payload: data
-        });
+        channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
       }
-
+      const finalStatus: MessageStatus = isStudentOnline ? 'delivered' : 'sent';
       setAllClassMsgs(prev => ({
         ...prev,
-        [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => 
-          m.id === (optimisticId as any) ? { ...m, id: data.id } : m
+        [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m =>
+          m.id === optimisticId ? { ...m, id: data.id, status: finalStatus } : m
         )
       }));
     }
