@@ -124,8 +124,10 @@ export default function StudentSessionsPage() {
   const msgBottomRef = useRef<HTMLDivElement>(null);
   const classBottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<any>(null);
+  const globalWatchChannelRef = useRef<any>(null);
   const selectedSessionRef = useRef<TutorSession | null>(null);
   const currentUserRef = useRef<any>(null);
+  const sessionsRef = useRef<TutorSession[]>([]);
   const [isTutorTyping, setIsTutorTyping] = useState(false);
   const typingTimeoutRef = useRef<any>(null);
 
@@ -218,6 +220,48 @@ export default function StudentSessionsPage() {
   // Always keep refs in sync so realtime callbacks never read stale closure values
   useEffect(() => { selectedSessionRef.current = selectedSession; }, [selectedSession]);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
+
+  // GLOBAL SIDEBAR WATCHER: Real-time updates for session status and activity
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    if (globalWatchChannelRef.current) return;
+
+    const globalChannel = supabase
+      .channel(`student-global-${currentUser.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages'
+      }, (payload) => {
+        const m = payload.new as any;
+        const currentSessions = sessionsRef.current;
+        const sessionIndex = currentSessions.findIndex(s => s.roomId === m.room_id);
+        if (sessionIndex === -1) return;
+
+        setSessions(prev => {
+          const newList = [...prev];
+          if (newList[sessionIndex]) {
+            // Update status to accepted if tutor messages
+            const isTutor = m.sender_id !== currentUser.id;
+            newList[sessionIndex] = {
+              ...newList[sessionIndex],
+              status: isTutor ? 'accepted' : newList[sessionIndex].status,
+              lastActive: 'Just Now'
+            };
+          }
+          return newList;
+        });
+      })
+      .subscribe();
+
+    globalWatchChannelRef.current = globalChannel;
+
+    return () => {
+      supabase.removeChannel(globalChannel);
+      globalWatchChannelRef.current = null;
+    };
+  }, [currentUser]);
 
   // ─── Fetch messages for selected session ──────────────────────────
   useEffect(() => {
@@ -261,7 +305,7 @@ export default function StudentSessionsPage() {
     };
     fetchMsgs();
 
-    const channel = supabase.channel(`room-${selectedSession.roomId}-${Math.random().toString(36).substring(7)}`);
+    const channel = supabase.channel(`session:${selectedSession.roomId}`);
     channelRef.current = channel;
 
     channel

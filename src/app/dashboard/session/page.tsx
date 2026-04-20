@@ -132,8 +132,10 @@ export default function SessionPage() {
   const classBottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<any>(null);
   const syncChannelRef = useRef<any>(null);
+  const globalWatchChannelRef = useRef<any>(null);
   const selectedStudentRef = useRef<StudentProfile | null>(null);
   const currentUserRef = useRef<any>(null);
+  const studentsRef = useRef<StudentProfile[]>([]);
   const [isStudentTyping, setIsStudentTyping] = useState(false);
   const typingTimeoutRef = useRef<any>(null);
 
@@ -340,6 +342,52 @@ export default function SessionPage() {
   // Always keep refs in sync so realtime callbacks never read stale closure values
   useEffect(() => { selectedStudentRef.current = selectedStudent; }, [selectedStudent]);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+  useEffect(() => { studentsRef.current = students; }, [students]);
+
+  // GLOBAL SIDEBAR WATCHER: Real-time dynamic updates for all student rows
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    
+    // Only create one global listener for the entire sidebar
+    if (globalWatchChannelRef.current) return;
+
+    const globalChannel = supabase
+      .channel(`specialist-global-${currentUser.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages'
+      }, (payload) => {
+        const m = payload.new as any;
+        // Verify this message belongs to one of our rooms
+        const currentStudents = studentsRef.current;
+        const studentIndex = currentStudents.findIndex(s => s.roomId === m.room_id);
+        if (studentIndex === -1) return;
+
+        // Skip signal messages for lastMsg preview
+        if (m.content.startsWith('SIGNAL') || m.content.startsWith('Discussion Started')) return;
+
+        setStudents(prev => {
+          const newList = [...prev];
+          if (newList[studentIndex]) {
+            newList[studentIndex] = {
+              ...newList[studentIndex],
+              lastMsg: m.content,
+              lastActive: 'Just Now'
+            };
+          }
+          return newList;
+        });
+      })
+      .subscribe();
+
+    globalWatchChannelRef.current = globalChannel;
+
+    return () => {
+      supabase.removeChannel(globalChannel);
+      globalWatchChannelRef.current = null;
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     if (!selectedStudent?.roomId) return;
@@ -382,7 +430,7 @@ export default function SessionPage() {
     };
     fetchMsgs();
 
-    const channel = supabase.channel(`room-${selectedStudent.roomId}-${Math.random().toString(36).substring(7)}`);
+    const channel = supabase.channel(`session:${selectedStudent.roomId}`);
     channelRef.current = channel;
 
     channel
@@ -419,6 +467,40 @@ export default function SessionPage() {
         const student = selectedStudentRef.current;
         const user = currentUserRef.current;
         if (!student) return;
+        setAllClassMsgs(prev => {
+          const studentMsgs = prev[student.id] || [];
+          if (studentMsgs.some(existing => existing.id === m.id)) return prev;
+          const msg: Message = {
+            id: m.id,
+            sender: m.sender_id === user?.id ? 'tutor' : 'student',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          return { ...prev, [student.id]: [...studentMsgs, msg] };
+        });
+      })
+      .on('broadcast', { event: 'new_message' }, (payload) => {
+        const m = payload.payload;
+        const student = selectedStudentRef.current;
+        const user = currentUserRef.current;
+        if (!student || m.room_id !== student.roomId) return;
+        setAllDiscMsgs(prev => {
+          const studentMsgs = prev[student.id] || [];
+          if (studentMsgs.some(existing => existing.id === m.id)) return prev;
+          const msg: Message = {
+            id: m.id,
+            sender: m.sender_id === user?.id ? 'tutor' : 'student',
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          return { ...prev, [student.id]: [...studentMsgs, msg] };
+        });
+      })
+      .on('broadcast', { event: 'new_class_message' }, (payload) => {
+        const m = payload.payload;
+        const student = selectedStudentRef.current;
+        const user = currentUserRef.current;
+        if (!student || m.room_id !== student.roomId) return;
         setAllClassMsgs(prev => {
           const studentMsgs = prev[student.id] || [];
           if (studentMsgs.some(existing => existing.id === m.id)) return prev;
