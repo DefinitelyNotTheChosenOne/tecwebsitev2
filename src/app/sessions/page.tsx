@@ -208,6 +208,10 @@ export default function StudentSessionsPage() {
     }
   };
 
+  // Always keep refs in sync so realtime callbacks never read stale closure values
+  useEffect(() => { selectedSessionRef.current = selectedSession; }, [selectedSession]);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+
   // ─── Fetch messages for selected session ──────────────────────────
   useEffect(() => {
     if (!selectedSession?.roomId || !currentUser) return;
@@ -249,10 +253,6 @@ export default function StudentSessionsPage() {
       }
     };
     fetchMsgs();
-
-  // Always keep refs in sync so realtime callbacks never read stale closure values
-  useEffect(() => { selectedSessionRef.current = selectedSession; }, [selectedSession]);
-  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
     const channel = supabase.channel(`room-${selectedSession.roomId}-${Math.random().toString(36).substring(7)}`);
     channelRef.current = channel;
