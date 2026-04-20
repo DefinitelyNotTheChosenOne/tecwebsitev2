@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, Send, CalendarDays, Clock,
@@ -65,14 +65,22 @@ type Tab = 'updates' | 'discussion' | 'class' | 'history';
 
 
 // ─── Message Status Icon ────────────────────────────────────────────────
-const MessageStatusIcon = ({ status, recipientInitial, recipientAvatar }: { status?: MessageStatus; recipientInitial?: string, recipientAvatar?: string }) => {
+const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: { status?: MessageStatus; recipientInitial?: string, recipientAvatar?: string }) => {
   if (!status) return null;
   
   // 1. Sending: A hollow, light-gray circle
-  if (status === 'sending') return <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0" />;
+  if (status === 'sending') return (
+    <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0 relative overflow-hidden">
+      <motion.div 
+        animate={{ opacity: [0.3, 0.6, 0.3] }}
+        transition={{ duration: 1.5, repeat: Infinity }}
+        className="absolute inset-0 bg-slate-200"
+      />
+    </div>
+  );
   
   // 2. Sent: A hollow circle with a blue outline
-  if (status === 'sent') return <div className="w-3.5 h-3.5 rounded-full border border-blue-400 shrink-0" />;
+  if (status === 'sent') return <div className="w-3.5 h-3.5 rounded-full border border-blue-500 shrink-0" />;
   
   // 3. Delivered: A filled gray circle with a checkmark
   if (status === 'delivered') return (
@@ -93,33 +101,56 @@ const MessageStatusIcon = ({ status, recipientInitial, recipientAvatar }: { stat
   );
   
   return null;
-};
+});
+
+MessageStatusIcon.displayName = 'MessageStatusIcon';
 
 // ─── Shared Components ──────────────────────────────────────────────
-const ChatBubble = ({ msg, tutorInitial, tutorAvatar, isReportingMode, isSelected, toggleSelect }: any) => (
-  <div 
-    onClick={() => isReportingMode && toggleSelect?.(msg.id)}
-    className={`flex items-start gap-3 w-full ${msg.sender === 'student' ? 'flex-row-reverse' : 'flex-row'} ${isReportingMode ? 'cursor-pointer p-2 rounded-xl transition-all hover:bg-slate-50' : ''} ${isSelected ? 'bg-red-50 ring-1 ring-red-200' : ''}`}
-  >
-    {isReportingMode && (
-      <div className="flex items-center justify-center shrink-0 mt-2">
-        <div className={`w-5 h-5 rounded border border-slate-300 ${isSelected ? 'bg-red-500 border-red-500' : 'bg-white'} flex items-center justify-center`}>
-          {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+const ChatBubble = memo(({ msg, tutorInitial, tutorAvatar, isReportingMode, isSelected, toggleSelect, onVisible }: any) => {
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (msg.sender === 'student' || !onVisible || msg.id.toString().startsWith('opt-')) return;
+    
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        onVisible(msg.id);
+        observer.disconnect();
+      }
+    }, { threshold: 0.1 });
+
+    if (bubbleRef.current) observer.observe(bubbleRef.current);
+    return () => observer.disconnect();
+  }, [msg.id, msg.sender, onVisible]);
+
+  return (
+    <div 
+      ref={bubbleRef}
+      onClick={() => isReportingMode && toggleSelect?.(msg.id)}
+      className={`flex items-start gap-3 w-full ${msg.sender === 'student' ? 'flex-row-reverse' : 'flex-row'} ${isReportingMode ? 'cursor-pointer p-2 rounded-xl transition-all hover:bg-slate-50' : ''} ${isSelected ? 'bg-red-50 ring-1 ring-red-200' : ''}`}
+    >
+      {isReportingMode && (
+        <div className="flex items-center justify-center shrink-0 mt-2">
+          <div className={`w-5 h-5 rounded border border-slate-300 ${isSelected ? 'bg-red-500 border-red-500' : 'bg-white'} flex items-center justify-center`}>
+            {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+          </div>
+        </div>
+      )}
+      <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ring-1 ring-slate-100 overflow-hidden ${msg.sender === 'student' ? 'bg-blue-600 text-white' : 'bg-brand-primary text-brand-dark'}`}>
+        {msg.sender === 'student' ? 'Y' : (tutorAvatar ? <img src={tutorAvatar} className="w-full h-full object-cover" alt="" /> : tutorInitial)}
+      </div>
+      <div className={`max-w-[75%] ${msg.sender === 'student' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+        <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'student' ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
+          {msg.sender === 'student' && <MessageStatusIcon status={msg.status} recipientInitial={tutorInitial} recipientAvatar={tutorAvatar} />}
         </div>
       </div>
-    )}
-    <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ring-1 ring-slate-100 overflow-hidden ${msg.sender === 'student' ? 'bg-blue-600 text-white' : 'bg-brand-primary text-brand-dark'}`}>
-      {msg.sender === 'student' ? 'Y' : (tutorAvatar ? <img src={tutorAvatar} className="w-full h-full object-cover" alt="" /> : tutorInitial)}
     </div>
-    <div className={`max-w-[75%] ${msg.sender === 'student' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-      <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'student' ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
-      <div className="flex items-center gap-1.5">
-        <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
-        {msg.sender === 'student' && <MessageStatusIcon status={msg.status} recipientInitial={tutorInitial} recipientAvatar={tutorAvatar} />}
-      </div>
-    </div>
-  </div>
-);
+  );
+});
+
+ChatBubble.displayName = 'ChatBubble';
 
 const ChatInput = ({ value, onChange, onSend, placeholder }: any) => (
   <div className="flex items-center gap-4 bg-white border border-slate-200 p-2 rounded-2xl shadow-lg ring-1 ring-slate-100 mt-auto">
@@ -410,12 +441,13 @@ export default function StudentSessionsPage() {
         if (m.content.startsWith('SIGNAL INITIATED:') || m.content.startsWith('SIGNAL ACCEPTED:') || m.content.startsWith('SIGNAL REJECTED:') || m.content.startsWith('Discussion Started')) return;
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
+          const status: MessageStatus = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
           return [...prev, {
             id: m.id,
             sender: m.sender_id === user?.id ? 'student' : 'tutor',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === user?.id ? 'sent' : undefined
+            status
           } as Message];
         });
       })
@@ -426,12 +458,13 @@ export default function StudentSessionsPage() {
         if (!sess || m.room_id !== sess.roomId) return;
         setMessages(prev => {
           if (prev.some(existing => existing.id === m.id)) return prev;
+          const status: MessageStatus = m.sender_id === user?.id ? (isTutorOnline ? 'delivered' : 'sent') : undefined;
           return [...prev, {
             id: m.id,
             sender: m.sender_id === user?.id ? 'student' : 'tutor',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === user?.id ? 'sent' : undefined
+            status
           } as Message];
         });
       })
@@ -468,9 +501,14 @@ export default function StudentSessionsPage() {
         });
       })
       // ── Tutor read our messages → upgrade to Seen ─────────────────────
-      .on('broadcast', { event: 'messages_read' }, () => {
-        setMessages(prev => prev.map(m => m.sender === 'student' ? { ...m, status: 'seen' as MessageStatus } : m));
-        setClassMessages(prev => prev.map(m => m.sender === 'student' ? { ...m, status: 'seen' as MessageStatus } : m));
+      .on('broadcast', { event: 'messages_read' }, ({ payload }) => {
+        const sess = selectedSessionRef.current;
+        if (!sess || payload.roomId !== sess.roomId) return;
+        
+        const { msgId } = payload;
+        
+        setMessages(prev => prev.map(m => (m.id === msgId || !msgId) && m.sender === 'student' ? { ...m, status: 'seen' as MessageStatus } : m));
+        setClassMessages(prev => prev.map(m => (m.id === msgId || !msgId) && m.sender === 'student' ? { ...m, status: 'seen' as MessageStatus } : m));
       })
       // ── Presence: detect if tutor is online → upgrade to Delivered ───
       .on('presence', { event: 'sync' }, () => {
@@ -521,7 +559,41 @@ export default function StudentSessionsPage() {
           payload: { room_id: selectedSession.roomId }
         });
       });
-  }, [activeTab, selectedSession?.id]);
+  }, [activeTab, selectedSession, currentUser]);
+
+  const markAsRead = useCallback((msgId: string | number) => {
+    const sess = selectedSessionRef.current;
+    if (!sess || !currentUser) return;
+    
+    supabase.from('chat_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', msgId)
+      .eq('room_id', sess.roomId)
+      .then(() => {
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'messages_read',
+          payload: { roomId: sess.roomId, msgId }
+        });
+      });
+  }, [currentUser]);
+
+  const markClassAsRead = useCallback((msgId: string | number) => {
+    const sess = selectedSessionRef.current;
+    if (!sess || !currentUser) return;
+    
+    supabase.from('live_class_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', msgId)
+      .eq('room_id', sess.roomId)
+      .then(() => {
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'messages_read',
+          payload: { roomId: sess.roomId, msgId }
+        });
+      });
+  }, [currentUser]);
 
   const handleTyping = () => {
     if (!channelRef.current) return;
@@ -926,86 +998,54 @@ export default function StudentSessionsPage() {
                               <p className="text-xs font-bold text-slate-400 mt-0.5">{fmtTime(sc.start_time)} — {fmtTime(sc.end_time)}</p>
                               <div className="flex items-center gap-2 mt-2">
                                 <div className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-                                <span className={`text-[9px] font-black uppercase tracking-widest ${isLive ? 'text-emerald-500' : 'text-blue-500'}`}>
-                                  {isLive ? 'Live Now' : 'Upcoming'}
-                                </span>
+                                <p className={`text-[8px] font-black uppercase tracking-widest ${isLive ? 'text-emerald-500' : 'text-blue-500'}`}>{isLive ? 'Mission Active' : `Class in ${countdown}`}</p>
                               </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            {isLive ? (
-                              <button onClick={() => setActiveTab('class')} className="px-5 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2">
-                                <Zap className="w-3.5 h-3.5" /> Join Class
-                              </button>
-                            ) : countdown ? (
-                              <div className="bg-brand-dark px-4 py-2 rounded-xl">
-                                <p className="text-[8px] font-black uppercase tracking-[3px] text-brand-primary/50 mb-0.5">Starts In</p>
-                                <p className="text-lg font-black text-brand-primary">{countdown}</p>
-                              </div>
-                            ) : null}
-                          </div>
+                          {isLive && (
+                             <button onClick={() => setActiveTab('class')} className="px-6 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 flex items-center gap-2">
+                               Enter Class <ArrowRight className="w-3 h-3" />
+                             </button>
+                          )}
                         </div>
                       );
                     })
                   )}
                 </div>
-              </motion.div>
-            )}
 
-            {/* ── HISTORY TAB ───────────────────────────────────────── */}
-            {activeTab === 'history' && (
-              <motion.div key="history" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto px-10 py-10 space-y-8 custom-scroll">
-                 <div className="space-y-4">
-                  <p className="text-[10px] font-black uppercase tracking-[5px] text-slate-400">Mission Archive</p>
-                  
-                  {(!selectedSession || selectedSession.scheduledClasses.filter(sc => now > toDateTime(sc.class_date, sc.end_time)).length === 0) ? (
-                    <div className="p-20 text-center">
-                       <History className="w-12 h-12 text-slate-100 mx-auto mb-4" />
-                       <p className="text-[10px] font-black uppercase tracking-[3px] text-slate-200 italic">No historical data manifest.</p>
-                    </div>
-                  ) : (
-                    selectedSession.scheduledClasses
-                    .filter(sc => now > toDateTime(sc.class_date, sc.end_time))
-                    .map(sc => (
-                      <div key={sc.id} className="bg-white border border-slate-100 rounded-2xl p-6 flex items-center justify-between opacity-80 decoration-slate-300">
-                        <div className="flex items-center gap-5">
-                          <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400">
-                            <CheckCircle2 className="w-6 h-6" />
+                {/* Mission Logs */}
+                <div className="space-y-4 pt-6 md:pt-10">
+                   <p className="text-[10px] font-black uppercase tracking-[5px] text-slate-400">Mission Logs</p>
+                   <div className="bg-white rounded-[2rem] border border-slate-100 p-8 shadow-sm">
+                      <div className="space-y-4">
+                        {messages.filter(m => m.content.toLowerCase().includes('📅 class scheduled') || m.content.toLowerCase().includes('discussion started'))
+                          .map(m => (
+                            <div key={m.id} className="flex gap-4 items-start group">
+                              <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 group-hover:bg-blue-50 transition-colors">
+                                <Bell className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                              </div>
+                              <div className="flex-1 border-b border-slate-50 pb-4 last:border-0 last:pb-0">
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">{m.time}</p>
+                                <p className="text-sm font-medium text-brand-dark leading-relaxed">{m.text}</p>
+                              </div>
+                            </div>
+                          ))}
+                        {messages.filter(m => m.content.toLowerCase().includes('📅 class scheduled') || m.content.toLowerCase().includes('discussion started')).length === 0 && (
+                          <div className="py-12 text-center opacity-30">
+                            <History className="w-10 h-10 mx-auto mb-4" />
+                            <p className="text-[10px] font-black uppercase tracking-[3px]">No communication logs yet</p>
                           </div>
-                          <div>
-                            <p className="font-black italic text-slate-400 uppercase text-sm">{fmtDate(sc.class_date)}</p>
-                            <p className="text-xs font-bold text-slate-300 mt-0.5">{fmtTime(sc.start_time)} — {fmtTime(sc.end_time)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                           <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500">Completed</span>
-                        </div>
+                        )}
                       </div>
-                    ))
-                  )}
-                 </div>
+                   </div>
+                </div>
               </motion.div>
             )}
 
-            {/* ── DISCUSSION TAB ───────────────────────────────────── */}
-            {activeTab === 'discussion' && (
-              <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col max-w-4xl mx-auto px-8 pt-6 pb-4">
-                
-                <div className="flex items-center justify-end mb-4 shrink-0">
-                   {!isReportingMode ? (
-                     <button onClick={() => setIsReportingMode(true)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
-                       <Shield className="w-3.5 h-3.5" /> Report Issue
-                     </button>
-                   ) : (
-                     <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center w-full justify-between shadow-sm">
-                       <span>Please select chat you want to report</span>
-                       <button onClick={() => { setIsReportingMode(false); setSelectedMessages([]); }} className="text-slate-400 hover:text-red-600 transition-colors">Cancel</button>
-                     </div>
-                   )}
-                </div>
-
-                <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll relative">
+            {/* ── DISCUSSION TAB ────────────────────────────────────── */}
+            {activeTab === 'discussion' && selectedSession && (
+              <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col w-full px-4 md:px-12 pt-8 pb-4">
+                <div className="flex-1 overflow-y-auto space-y-6 md:space-y-6 pr-4 custom-scroll relative">
                   {messages.length === 0 && (
                      <div className="py-20 text-center">
                        <MessageCircle className="w-12 h-12 text-slate-200 mx-auto mb-4" />
@@ -1021,6 +1061,7 @@ export default function StudentSessionsPage() {
                       isReportingMode={isReportingMode}
                       isSelected={selectedMessages.includes(m.id)}
                       toggleSelect={(id: string) => setSelectedMessages(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                      onVisible={markAsRead}
                     />
                   ))}
                   <div ref={msgBottomRef} />
@@ -1076,7 +1117,7 @@ export default function StudentSessionsPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="h-full flex flex-col max-w-4xl mx-auto w-full">
+                  <div className="h-full flex flex-col w-full px-4 md:px-12">
                     <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-4 mb-6 flex items-center justify-between shadow-sm">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
@@ -1088,19 +1129,14 @@ export default function StudentSessionsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-6">
-                        <div className="text-right">
-                          <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/50 mb-0.5">Time Limit</p>
-                          <p className="text-xs font-bold text-emerald-700">{fmtTime(getActiveClass()?.start_time || '00:00')} - {fmtTime(getActiveClass()?.end_time || '00:00')}</p>
-                        </div>
-                        <div className="h-8 w-px bg-emerald-200" />
                         <div className="text-right min-w-[80px]">
                           <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/50 mb-0.5">Ending In</p>
                           <p className="text-xl font-black text-emerald-700 font-mono tracking-tighter">{getTimeRemaining(getActiveClass())}</p>
                         </div>
                       </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto space-y-6 md:space-y-6 pr-4 custom-scroll">
-                      {classMessages.map(m => <ChatBubble key={m.id} msg={m} tutorInitial={selectedSession?.tutorInitial || 'T'} tutorAvatar={selectedSession?.tutorAvatar} />)}
+                     <div className="flex-1 overflow-y-auto space-y-6 md:space-y-6 pr-4 custom-scroll">
+                      {classMessages.map(m => <ChatBubble key={m.id} msg={m} tutorInitial={selectedSession?.tutorInitial || 'T'} tutorAvatar={selectedSession?.tutorAvatar} onVisible={markClassAsRead} />)}
                       <div ref={classBottomRef} />
                     </div>
                     <ChatInput value={classInput} onChange={setClassInput} onSend={sendClassMsg} placeholder="Ask a question..." />

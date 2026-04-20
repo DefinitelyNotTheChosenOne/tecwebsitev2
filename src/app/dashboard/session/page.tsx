@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, Send, MessageSquare, CalendarDays,
@@ -70,11 +70,19 @@ type Tab = 'discussion' | 'schedule' | 'class';
 const MAX_CLASSES = 5;
 
 // ─── Message Status Icon ────────────────────────────────────────────────
-const MessageStatusIcon = ({ status, recipientInitial, recipientAvatar }: { status?: MessageStatus; recipientInitial?: string, recipientAvatar?: string }) => {
+const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: { status?: MessageStatus; recipientInitial?: string, recipientAvatar?: string }) => {
   if (!status) return null;
   
   // 1. Sending: A hollow, light-gray circle
-  if (status === 'sending') return <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0" />;
+  if (status === 'sending') return (
+    <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0 relative overflow-hidden">
+      <motion.div 
+        animate={{ opacity: [0.3, 0.6, 0.3] }}
+        transition={{ duration: 1.5, repeat: Infinity }}
+        className="absolute inset-0 bg-slate-200"
+      />
+    </div>
+  );
   
   // 2. Sent: A hollow circle with a blue outline (User is offline)
   if (status === 'sent') return <div className="w-3.5 h-3.5 rounded-full border border-blue-500 shrink-0" />;
@@ -98,23 +106,45 @@ const MessageStatusIcon = ({ status, recipientInitial, recipientAvatar }: { stat
   );
   
   return null;
-};
+});
+
+MessageStatusIcon.displayName = 'MessageStatusIcon';
 
 // ─── Shared Components ──────────────────────────────────────────────
-const ChatBubble = ({ msg, selectedStudent }: { msg: Message, selectedStudent: StudentProfile | null }) => (
-  <div className={`flex gap-3 ${msg.sender === 'tutor' ? 'flex-row-reverse' : 'flex-row'}`}>
-    <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ring-1 ring-slate-100 overflow-hidden ${msg.sender === 'tutor' ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>
-      {msg.sender === 'tutor' ? 'T' : (selectedStudent?.avatar_url ? <img src={selectedStudent.avatar_url} className="w-full h-full object-cover" alt="" /> : (selectedStudent?.initial || 'S'))}
-    </div>
-    <div className={`max-w-[75%] ${msg.sender === 'tutor' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-      <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'tutor' ? 'bg-brand-dark text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
-      <div className="flex items-center gap-1.5">
-        <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
-        {msg.sender === 'tutor' && <MessageStatusIcon status={msg.status} recipientInitial={selectedStudent?.initial} recipientAvatar={selectedStudent?.avatar_url} />}
+const ChatBubble = memo(({ msg, selectedStudent, onVisible }: { msg: Message, selectedStudent: StudentProfile | null, onVisible?: (msgId: string | number) => void }) => {
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (msg.sender === 'tutor' || !onVisible || msg.id.toString().startsWith('opt-')) return;
+    
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        onVisible(msg.id);
+        observer.disconnect();
+      }
+    }, { threshold: 0.1 });
+
+    if (bubbleRef.current) observer.observe(bubbleRef.current);
+    return () => observer.disconnect();
+  }, [msg.id, msg.sender, onVisible]);
+
+  return (
+    <div ref={bubbleRef} className={`flex gap-3 ${msg.sender === 'tutor' ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ring-1 ring-slate-100 overflow-hidden ${msg.sender === 'tutor' ? 'bg-brand-primary text-brand-dark' : 'bg-slate-200 text-slate-600'}`}>
+        {msg.sender === 'tutor' ? 'T' : (selectedStudent?.avatar_url ? <img src={selectedStudent.avatar_url} className="w-full h-full object-cover" alt="" /> : (selectedStudent?.initial || 'S'))}
+      </div>
+      <div className={`max-w-[75%] ${msg.sender === 'tutor' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+        <div className={`px-4 py-3 rounded-2xl text-sm font-medium ${msg.sender === 'tutor' ? 'bg-brand-dark text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-brand-dark rounded-tl-sm shadow-sm'}`}>{msg.text}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{msg.time}</span>
+          {msg.sender === 'tutor' && <MessageStatusIcon status={msg.status} recipientInitial={selectedStudent?.initial} recipientAvatar={selectedStudent?.avatar_url} />}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+});
+
+ChatBubble.displayName = 'ChatBubble';
 
 const ChatInput = ({ value, onChange, onSend, placeholder }: any) => (
   <div className="flex items-center gap-4 bg-white border border-slate-200 p-2 rounded-2xl shadow-lg ring-1 ring-slate-100 mt-auto">
@@ -609,14 +639,23 @@ export default function SessionPage() {
       // ── Student read their messages → upgrade to Seen ──────────────
       .on('broadcast', { event: 'messages_read' }, ({ payload }) => {
         const student = selectedStudentRef.current;
-        if (!student) return;
+        if (!student || payload.roomId !== student.roomId) return;
+        
+        const { msgId } = payload;
+        
         setAllDiscMsgs(prev => {
           const msgs = prev[student.id] || [];
-          return { ...prev, [student.id]: msgs.map(m => m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m) };
+          return { 
+            ...prev, 
+            [student.id]: msgs.map(m => (m.id === msgId || !msgId) && m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m) 
+          };
         });
         setAllClassMsgs(prev => {
           const msgs = prev[student.id] || [];
-          return { ...prev, [student.id]: msgs.map(m => m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m) };
+          return { 
+            ...prev, 
+            [student.id]: msgs.map(m => (m.id === msgId || !msgId) && m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m) 
+          };
         });
       })
       // ── Presence: detect if student is online → upgrade to Delivered ─
@@ -681,7 +720,41 @@ export default function SessionPage() {
           payload: { room_id: selectedStudent.roomId }
         });
       });
-  }, [activeTab, selectedStudent?.id]);
+  }, [selectedStudent, currentUser]);
+
+  const markAsRead = useCallback((msgId: string | number) => {
+    const student = selectedStudentRef.current;
+    if (!student || !currentUser) return;
+    
+    supabase.from('chat_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', msgId)
+      .eq('room_id', student.roomId)
+      .then(() => {
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'messages_read',
+          payload: { roomId: student.roomId, msgId }
+        });
+      });
+  }, [currentUser]);
+
+  const markClassAsRead = useCallback((msgId: string | number) => {
+    const student = selectedStudentRef.current;
+    if (!student || !currentUser) return;
+    
+    supabase.from('live_class_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', msgId)
+      .eq('room_id', student.roomId)
+      .then(() => {
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'messages_read',
+          payload: { roomId: student.roomId, msgId }
+        });
+      });
+  }, [currentUser]);
 
   const handleTyping = () => {
     if (!channelRef.current) return;
@@ -1024,17 +1097,12 @@ export default function SessionPage() {
                   <p className="text-[10px] font-bold uppercase tracking-[3px] text-slate-400 mt-2">Active telemetry requires student selection from the sidebar.</p>
                 </div>
               </motion.div>
-) : isClassEnded(selectedStudent) ? (
-              /* ── ARCHIVE VIEW: Read-only chat history for past sessions ── */
-              <motion.div key="class-archive" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col">
-                <div className="flex-1 overflow-y-auto space-y-6 px-8 md:px-12 pt-8 pb-4 custom-scroll">
-                  {classMsgs.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center opacity-30 space-y-4">
-                      <BookOpen className="w-12 h-12 text-slate-400" />
-                      <p className="text-xs font-black uppercase tracking-widest text-slate-400">No class history recorded</p>
-                    </div>
-                  ) : classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
-                  <div ref={classBottomRef} />
+            ) : isClassEnded(selectedStudent) ? (
+              /* Archive view */
+              <motion.div key="class-archive" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col pt-8 px-8 md:px-12">
+                <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
+                   {classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
+                   <div ref={classBottomRef} />
                 </div>
               </motion.div>
             ) : activeTab === 'schedule' ? (
@@ -1059,9 +1127,9 @@ export default function SessionPage() {
                 </div>
               </motion.div>
             ) : activeTab === 'discussion' ? (
-               <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col w-full px-8 md:px-12 pt-8 pb-4">
+              <motion.div key="discussion" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col w-full px-8 md:px-12 pt-8 pb-4">
                 <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
-                  {discMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
+                  {discMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} onVisible={markAsRead} />)}
                   <div ref={discBottomRef} />
                 </div>
                 <ChatInput 
@@ -1083,7 +1151,7 @@ export default function SessionPage() {
                 ) : (
                   <div className="h-full flex flex-col w-full px-8 md:px-12">
                     <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scroll">
-                      {classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} />)}
+                      {classMsgs.map(m => <ChatBubble key={m.id} msg={m} selectedStudent={selectedStudent} onVisible={markClassAsRead} />)}
                       <div ref={classBottomRef} />
                     </div>
                     <ChatInput value={classInput} onChange={setClassInput} onSend={sendClassMsg} placeholder="Execute live instruction..." />
