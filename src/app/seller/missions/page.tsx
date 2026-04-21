@@ -91,15 +91,12 @@ export default function SpecialistMissionBoard() {
         // Handle Supabase joining returning either an object or an array of objects
         const studentProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
         
+        // Parse the dynamic subject from the original signal message
         let dynamicSubject = "Direct Handshake";
-        // Logic to extract subject if it exists in the message chain
-        const msgs = (room.chat_messages || []).sort((a: any, b: any) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        const latestMsg = msgs[0];
-
-        if (latestMsg && latestMsg.content) {
-            const match = latestMsg.content.match(/requested a (.+) session/i);
+        const initMsg = (room.chat_messages || []).find((m: any) => m.content && m.content.includes('SIGNAL INITIATED:'));
+        
+        if (initMsg) {
+            const match = initMsg.content.match(/requesting a (.+) session/i);
             if (match && match[1]) {
               dynamicSubject = match[1];
             }

@@ -394,12 +394,20 @@ export default function SessionPage() {
           let latestSignalTime = null;
           if (signalMsgs && signalMsgs.length > 0) {
              const latestUnlockMsg = (signalMsgs as any[]).find((m: any) => 
-               m.content.toLowerCase().startsWith('signal: unlock')
+               m.content.toLowerCase().startsWith('signal: unlock') ||
+               m.content.toLowerCase().startsWith('signal initiated:') ||
+               m.content.toLowerCase().startsWith('discussion started')
              );
              
              if (latestUnlockMsg) {
                 if (!subject) {
-                  subject = latestUnlockMsg.content.split('"')[1] || latestUnlockMsg.content.split('for ')[1];
+                  const c = latestUnlockMsg.content;
+                  if (c.toLowerCase().includes('requesting a ')) {
+                    const match = c.match(/requesting a (.+) session/i);
+                    if (match) subject = match[1];
+                  } else {
+                    subject = c.split('"')[1] || c.split('for ')[1];
+                  }
                 }
                 latestSignalTime = new Date(latestUnlockMsg.created_at).getTime();
              }
