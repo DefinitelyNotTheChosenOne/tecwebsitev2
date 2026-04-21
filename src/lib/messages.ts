@@ -64,6 +64,13 @@ export const sendMessage = async (
  * Should be triggered when a user enters a discussion thread.
  */
 export const markRoomMessagesAsRead = async (roomId: string, currentUserId: string) => {
+  console.log(`[MUTATION_START] Room: ${roomId}, User: ${currentUserId}`);
+  
+  if (!currentUserId) {
+    console.error("[MUTATION_FAILED] currentUserId is undefined. Persistence aborted.");
+    return;
+  }
+
   const { error } = await supabase
     .from('chat_messages')
     .update({ 
@@ -75,8 +82,10 @@ export const markRoomMessagesAsRead = async (roomId: string, currentUserId: stri
     .in('status', ['sent', 'delivered']);
 
   if (error) {
-    console.error('Failed to persist read status:', error);
+    console.error('[MUTATION_FAILED] Database rejection:', error.message, error.details);
     throw error;
+  } else {
+    console.log(`[MUTATION_SUCCESS] Messages in room ${roomId} marked as read.`);
   }
 };
 

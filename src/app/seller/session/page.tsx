@@ -616,7 +616,7 @@ export default function SessionPage() {
         const user = currentUserRef.current;
         if (!student || m.room_id !== student.roomId) return;
         
-        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) : undefined;
+        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.read_at ? 'read' : m.delivered_at ? 'delivered' : (m.status || 'sent')) : undefined;
 
         if (type === 'INSERT') {
           if (m.sender_id !== user?.id && m.status === 'sent') {
@@ -653,7 +653,7 @@ export default function SessionPage() {
         const user = currentUserRef.current;
         if (!student || m.room_id !== student.roomId) return;
         
-        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) : undefined;
+        const status: MessageStatus | undefined = m.sender_id === user?.id ? (m.read_at ? 'read' : m.delivered_at ? 'delivered' : (m.status || 'sent')) : undefined;
 
         if (type === 'INSERT') {
           if (m.sender_id !== user?.id && m.status === 'sent') {

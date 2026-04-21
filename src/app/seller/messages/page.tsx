@@ -23,6 +23,10 @@ export default function MessageTerminal() {
 
   useEffect(() => {
     fetchIntelligence();
+    
+    // Nuke Stale Cache: Re-fetch on focus
+    window.addEventListener('focus', fetchIntelligence);
+    return () => window.removeEventListener('focus', fetchIntelligence);
   }, []);
 
   useEffect(() => {
@@ -62,7 +66,20 @@ export default function MessageTerminal() {
         .or(`student_id.eq.${session.user.id},tutor_id.eq.${session.user.id}`)
         .order('last_message_at', { ascending: false });
 
-      setRooms(roomsData || []);
+      if (roomsData) {
+        // Audit Fetch: Identify unread status per room
+        const roomsWithUnread = await Promise.all(roomsData.map(async (room) => {
+          const { count } = await supabase
+            .from('chat_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('room_id', room.id)
+            .neq('sender_id', session.user.id)
+            .in('status', ['sent', 'delivered']);
+          
+          return { ...room, unreadCount: count || 0 };
+        }));
+        setRooms(roomsWithUnread);
+      }
     }
     setLoading(false);
   };
@@ -190,10 +207,19 @@ export default function MessageTerminal() {
                         <p className="text-[10px] font-black uppercase tracking-widest text-brand-primary mb-1">
                            # {room.request?.subject || 'Direct Negotiaton'}
                         </p>
-                        <h4 className="font-black text-lg truncate italic">
-                           {profile?.role === 'seller' ? room.student?.full_name : room.tutor?.full_name}
-                        </h4>
-                        <p className="text-xs text-zinc-600 truncate mt-1 italic font-medium">Click to enter tunnel...</p>
+                         <h4 className="font-black text-lg truncate italic flex items-center gap-2">
+                            {profile?.role === 'seller' ? room.student?.full_name : room.tutor?.full_name}
+                            {room.unreadCount > 0 && (
+                              <motion.div 
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                className="w-2.5 h-2.5 bg-brand-primary rounded-full shadow-[0_0_10px_rgba(255,185,0,0.5)]" 
+                              />
+                            )}
+                         </h4>
+                         <p className="text-xs text-zinc-600 truncate mt-1 italic font-medium">
+                           {room.unreadCount > 0 ? `${room.unreadCount} new signals...` : 'Click to enter tunnel...'}
+                         </p>
                      </div>
                   </button>
                ))}
