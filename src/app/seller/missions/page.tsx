@@ -85,9 +85,19 @@ export default function SpecialistMissionBoard() {
     const refinedDirect = (directRooms || [])
       .filter((room: any) => {
         const hasSession = sessionRoomIds.has(room.id);
-        const isRejected = (room.chat_messages || []).some((m: any) => 
-          m.content && m.content.toUpperCase().includes('SIGNAL REJECTED')
-        );
+        
+        // Find the LATEST signal message in the room
+        const signals = (room.chat_messages || [])
+          .filter((m: any) => m.content && (
+             m.content.toUpperCase().includes('SIGNAL INITIATED') || 
+             m.content.toUpperCase().includes('SIGNAL REJECTED') ||
+             m.content.toUpperCase().includes('DISCUSSION STARTED')
+          ))
+          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        const latestSignal = signals[0];
+        const isRejected = latestSignal && latestSignal.content.toUpperCase().includes('SIGNAL REJECTED');
+
         return !hasSession && !isRejected;
       })
       .map((room: any) => {
