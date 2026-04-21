@@ -735,12 +735,26 @@ export default function SessionPage() {
   const isClassLocked = () => {
     if (!selectedStudent) return true;
     const studentSchedules = [...(selectedStudent.schedules || [])];
+    
+    // 1. Manual Signal Override: Force unlock regardless of schedule
+    // This allows tutors to open the terminal for emergency discussions
+    if (selectedStudent.latestSignalTime) {
+      // Check if the signal was sent recently (e.g., within last 24h) to avoid stale unlocks
+      const signalAgeHours = (now.getTime() - selectedStudent.latestSignalTime) / 3600000;
+      if (signalAgeHours < 24) return false;
+    }
+
     if (studentSchedules.length === 0) return true;
-    studentSchedules.sort((a, b) => toDate(a.class_date, a.end_time).getTime() - toDate(b.class_date, b.end_time).getTime());
-    const last = studentSchedules[studentSchedules.length - 1];
-    const lastEndTime = toDate(last.class_date, last.end_time).getTime();
-    if (selectedStudent.latestSignalTime && selectedStudent.latestSignalTime > lastEndTime) return false;
-    return now.getTime() > lastEndTime;
+
+    // 2. Schedule Check: Unlock ONLY if current time is within ANY scheduled window
+    const currentTime = now.getTime();
+    const hasActiveWindow = studentSchedules.some(s => {
+      const start = toDate(s.class_date, s.start_time).getTime();
+      const end = toDate(s.class_date, s.end_time).getTime();
+      return currentTime >= start && currentTime <= end;
+    });
+
+    return !hasActiveWindow;
   };
 
   const isClassEnded = (student: any) => {
@@ -756,10 +770,40 @@ export default function SessionPage() {
   const scheduleClass = async () => {
     if (!formDate || !formStart || !formEnd || !selectedStudent) return;
     setConflictError(null);
-    if (formEnd <= formStart) { setConflictError('End time must be after start time.'); return; }
-    const ns = toDate(formDate, formStart), ne = toDate(formDate, formEnd);
-    const conflicts = slots.filter(s => s.date === formDate && hasConflict(ns, ne, toDate(s.date, s.start_time), toDate(s.date, s.end_time)));
-    if (conflicts.length > 0) { setConflictError(`Conflict: ${conflicts[0].studentName} is scheduled then.`); return; }
+    
+    // 1. Basic time sequence validation
+    if (formEnd <= formStart) { 
+      setConflictError('Mission failure: End time must be after start time.'); 
+      return; 
+    }
+    
+    const ns = toDate(formDate, formStart);
+    const ne = toDate(formDate, formEnd);
+    const now = new Date();
+
+    // 2. Prevent scheduling in the past (ruthless check)
+    if (ns < now) {
+      setConflictError('Operation Redline: You cannot schedule a mission in the past. Select a future window.');
+      return;
+    }
+
+    // 3. Prevent micro-sessions (min 5 mins)
+    const durationMin = (ne.getTime() - ns.getTime()) / 60000;
+    if (durationMin < 5) {
+      setConflictError('Strategic Error: Minimum mission duration is 5 minutes.');
+      return;
+    }
+
+    // 4. Conflict check across all slots
+    const conflicts = slots.filter(s => 
+      s.date === formDate && 
+      hasConflict(ns, ne, toDate(s.date, s.start_time), toDate(s.date, s.end_time))
+    );
+    
+    if (conflicts.length > 0) { 
+      setConflictError(`Conflict Detected: ${conflicts[0].studentName} occupies this tactical window.`); 
+      return; 
+    }
     
     const { error: schedErr } = await supabase.from('scheduled_classes').insert({
       room_id: selectedStudent.roomId,
@@ -770,7 +814,11 @@ export default function SessionPage() {
       end_time: formEnd,
     });
     
-    if (schedErr) { setConflictError('Failed to save schedule. Try again.'); return; }
+    if (schedErr) { 
+      console.error('DB_LOCK_FAILURE:', schedErr);
+      setConflictError(`Tactical Shutdown: ${schedErr.message || 'Database rejection.'} (Error ${schedErr.code || 'UNKNOWN'})`); 
+      return; 
+    }
     await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser?.id, content: `📅 Class scheduled: ${fmtDate(formDate)} at ${fmtTime(formStart)} - ${fmtTime(formEnd)}` });
     
     const updatedStudent = { ...selectedStudent, schedules: [...(selectedStudent as any).schedules || [], { class_date: formDate, start_time: formStart, end_time: formEnd }] };

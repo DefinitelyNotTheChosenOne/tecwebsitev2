@@ -59,6 +59,7 @@ type TutorSession = {
   onlineStatus: UserStatus;
   lastSeen: string | null;
   scheduledClasses: ScheduledClass[];
+  latestSignalTime?: number | null;
 };
 
 // ─── Utilities ──────────────────────────────────────────────────────────
@@ -342,6 +343,12 @@ export default function StudentSessionsPage() {
 
         const unreadCount = roomMessages.filter((m: any) => m.sender_id === room.tutor_id && !m.read_at).length;
 
+        const latestSignalMsg = [...roomMessages].reverse().find(m => 
+          m.content.toLowerCase().includes('signal ') || 
+          m.content.toLowerCase().includes('discussion started')
+        );
+        const latestSignalTime = latestSignalMsg ? new Date(latestSignalMsg.created_at).getTime() : null;
+
         return {
           id: room.tutor_id,
           roomId: room.id,
@@ -356,6 +363,7 @@ export default function StudentSessionsPage() {
           onlineStatus: presenceData?.online_status as UserStatus || 'offline',
           lastSeen: presenceData?.last_seen || null,
           scheduledClasses: roomSchedules,
+          latestSignalTime,
         } as TutorSession;
       }));
 
@@ -765,7 +773,14 @@ export default function StudentSessionsPage() {
     return h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
   };
 
-  const isClassActive = () => !!getActiveClass();
+  const isClassActive = () => {
+    if (selectedSession?.latestSignalTime) {
+      // Respect manual signal override (within 24h window)
+      const signalAgeHours = (now.getTime() - selectedSession.latestSignalTime) / 3600000;
+      if (signalAgeHours < 24) return true;
+    }
+    return !!getActiveClass();
+  };
 
   const getTimeRemaining = (sc: ScheduledClass | null): string => {
     if (!sc) return '';
