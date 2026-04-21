@@ -344,8 +344,7 @@ export default function StudentSessionsPage() {
         const unreadCount = roomMessages.filter((m: any) => m.sender_id === room.tutor_id && !m.read_at).length;
 
         const latestSignalMsg = [...roomMessages].reverse().find(m => 
-          m.content.toLowerCase().startsWith('signal:') || 
-          m.content.toLowerCase().includes('📅 class scheduled')
+          m.content.toLowerCase().startsWith('signal: unlock')
         );
         const latestSignalTime = latestSignalMsg ? new Date(latestSignalMsg.created_at).getTime() : null;
 
@@ -452,7 +451,7 @@ export default function StudentSessionsPage() {
   useEffect(() => {
     if (activeTab === 'discussion' && selectedSession?.roomId) {
       supabase.from('chat_messages')
-        .update({ status: 'seen' })
+        .update({ status: 'seen', read_at: new Date().toISOString() })
         .eq('room_id', selectedSession.roomId)
         .neq('sender_id', currentUser?.id)
         .neq('status', 'seen')
@@ -465,7 +464,7 @@ export default function StudentSessionsPage() {
   useEffect(() => {
     if (activeTab === 'class' && selectedSession?.roomId) {
       supabase.from('live_class_messages')
-        .update({ status: 'seen' })
+        .update({ status: 'seen', read_at: new Date().toISOString() })
         .eq('room_id', selectedSession.roomId)
         .neq('sender_id', currentUser?.id)
         .neq('status', 'seen')
@@ -777,7 +776,7 @@ export default function StudentSessionsPage() {
     if (selectedSession?.latestSignalTime) {
       // Respect manual signal override (within 24h window)
       const signalAgeHours = (now.getTime() - selectedSession.latestSignalTime) / 3600000;
-      if (signalAgeHours < 24) return true;
+      if (signalAgeHours < 1) return true;
     }
     return !!getActiveClass();
   };

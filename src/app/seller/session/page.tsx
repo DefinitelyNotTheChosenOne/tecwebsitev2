@@ -393,16 +393,15 @@ export default function SessionPage() {
             
           let latestSignalTime = null;
           if (signalMsgs && signalMsgs.length > 0) {
-             const latestSystemMsg = (signalMsgs as any[]).find((m: any) => 
-               m.content.toLowerCase().startsWith('signal:') || 
-               m.content.toLowerCase().includes('📅 class scheduled')
+             const latestUnlockMsg = (signalMsgs as any[]).find((m: any) => 
+               m.content.toLowerCase().startsWith('signal: unlock')
              );
              
-             if (latestSystemMsg) {
+             if (latestUnlockMsg) {
                 if (!subject) {
-                  subject = latestSystemMsg.content.split('"')[1] || latestSystemMsg.content.split('for ')[1];
+                  subject = latestUnlockMsg.content.split('"')[1] || latestUnlockMsg.content.split('for ')[1];
                 }
-                latestSignalTime = new Date(latestSystemMsg.created_at).getTime();
+                latestSignalTime = new Date(latestUnlockMsg.created_at).getTime();
              }
           }
 
@@ -500,7 +499,7 @@ export default function SessionPage() {
   useEffect(() => {
     if (activeTab === 'discussion' && selectedStudent?.roomId) {
       supabase.from('chat_messages')
-        .update({ status: 'seen' })
+        .update({ status: 'seen', read_at: new Date().toISOString() })
         .eq('room_id', selectedStudent.roomId)
         .neq('sender_id', currentUser?.id)
         .neq('status', 'seen')
@@ -513,7 +512,7 @@ export default function SessionPage() {
   useEffect(() => {
     if (activeTab === 'class' && selectedStudent?.roomId) {
       supabase.from('live_class_messages')
-        .update({ status: 'seen' })
+        .update({ status: 'seen', read_at: new Date().toISOString() })
         .eq('room_id', selectedStudent.roomId)
         .neq('sender_id', currentUser?.id)
         .neq('status', 'seen')
@@ -741,7 +740,7 @@ export default function SessionPage() {
     if (selectedStudent.latestSignalTime) {
       // Check if the signal was sent recently (e.g., within last 24h) to avoid stale unlocks
       const signalAgeHours = (now.getTime() - selectedStudent.latestSignalTime) / 3600000;
-      if (signalAgeHours < 24) return false;
+      if (signalAgeHours < 1) return false;
     }
 
     if (studentSchedules.length === 0) return true;
