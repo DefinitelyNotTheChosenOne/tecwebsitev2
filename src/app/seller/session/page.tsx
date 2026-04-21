@@ -394,8 +394,8 @@ export default function SessionPage() {
           let latestSignalTime = null;
           if (signalMsgs && signalMsgs.length > 0) {
              const latestSystemMsg = (signalMsgs as any[]).find((m: any) => 
-               m.content.toLowerCase().includes('discussion started') || 
-               m.content.toLowerCase().includes('signal ')
+               m.content.toLowerCase().startsWith('signal:') || 
+               m.content.toLowerCase().includes('📅 class scheduled')
              );
              
              if (latestSystemMsg) {

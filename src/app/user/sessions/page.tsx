@@ -344,8 +344,8 @@ export default function StudentSessionsPage() {
         const unreadCount = roomMessages.filter((m: any) => m.sender_id === room.tutor_id && !m.read_at).length;
 
         const latestSignalMsg = [...roomMessages].reverse().find(m => 
-          m.content.toLowerCase().includes('signal ') || 
-          m.content.toLowerCase().includes('discussion started')
+          m.content.toLowerCase().startsWith('signal:') || 
+          m.content.toLowerCase().includes('📅 class scheduled')
         );
         const latestSignalTime = latestSignalMsg ? new Date(latestSignalMsg.created_at).getTime() : null;
 
