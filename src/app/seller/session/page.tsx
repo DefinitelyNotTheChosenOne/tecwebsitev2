@@ -112,7 +112,7 @@ const ChatBubble = memo(({ msg, selectedStudent, onVisible, showStatus }: { msg:
   const bubbleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (msg.sender === 'tutor' || !onVisible || msg.id.toString().startsWith('opt-') || msg.status === 'seen') return;
+    if (msg.sender === 'tutor' || !onVisible || msg.id.toString().startsWith('opt-') || msg.status === 'read') return;
     
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
@@ -227,26 +227,26 @@ export default function SessionPage() {
   const discLastSeenId = useMemo(() => {
     if (discLastMsgIsFromStudent) return null;
     for (let i = discMsgs.length - 1; i >= 0; i--) {
-      if (discMsgs[i].sender === 'tutor' && discMsgs[i].status === 'seen') return discMsgs[i].id;
+      if (discMsgs[i].sender === 'tutor' && discMsgs[i].status === 'read') return discMsgs[i].id;
     }
     return null;
   }, [discMsgs, discLastMsgIsFromStudent]);
 
   const discLastDeliveredId = useMemo(() => {
-    if (discLastMsgIsFromStudent || discLastSeenId) return null;
+    if (discLastMsgIsFromStudent) return null;
     for (let i = discMsgs.length - 1; i >= 0; i--) {
       if (discMsgs[i].sender === 'tutor' && discMsgs[i].status === 'delivered') return discMsgs[i].id;
     }
     return null;
-  }, [discMsgs, discLastSeenId, discLastMsgIsFromStudent]);
+  }, [discMsgs, discLastMsgIsFromStudent]);
 
   const discLastSentId = useMemo(() => {
-    if (discLastMsgIsFromStudent || discLastSeenId || discLastDeliveredId) return null;
+    if (discLastMsgIsFromStudent) return null;
     for (let i = discMsgs.length - 1; i >= 0; i--) {
       if (discMsgs[i].sender === 'tutor' && (discMsgs[i].status === 'sent' || discMsgs[i].status === 'sending')) return discMsgs[i].id;
     }
     return null;
-  }, [discMsgs, discLastSeenId, discLastDeliveredId, discLastMsgIsFromStudent]);
+  }, [discMsgs, discLastMsgIsFromStudent]);
 
   // ─── Singleton Status IDs — Class Tab (Messenger-style) ──────────────
   const classLastMsgIsFromStudent = classMsgs.length > 0 && classMsgs[classMsgs.length - 1].sender === 'student';
@@ -254,26 +254,26 @@ export default function SessionPage() {
   const classLastSeenId = useMemo(() => {
     if (classLastMsgIsFromStudent) return null;
     for (let i = classMsgs.length - 1; i >= 0; i--) {
-      if (classMsgs[i].sender === 'tutor' && classMsgs[i].status === 'seen') return classMsgs[i].id;
+      if (classMsgs[i].sender === 'tutor' && classMsgs[i].status === 'read') return classMsgs[i].id;
     }
     return null;
   }, [classMsgs, classLastMsgIsFromStudent]);
 
   const classLastDeliveredId = useMemo(() => {
-    if (classLastMsgIsFromStudent || classLastSeenId) return null;
+    if (classLastMsgIsFromStudent) return null;
     for (let i = classMsgs.length - 1; i >= 0; i--) {
       if (classMsgs[i].sender === 'tutor' && classMsgs[i].status === 'delivered') return classMsgs[i].id;
     }
     return null;
-  }, [classMsgs, classLastSeenId, classLastMsgIsFromStudent]);
+  }, [classMsgs, classLastMsgIsFromStudent]);
 
   const classLastSentId = useMemo(() => {
-    if (classLastMsgIsFromStudent || classLastSeenId || classLastDeliveredId) return null;
+    if (classLastMsgIsFromStudent) return null;
     for (let i = classMsgs.length - 1; i >= 0; i--) {
       if (classMsgs[i].sender === 'tutor' && (classMsgs[i].status === 'sent' || classMsgs[i].status === 'sending')) return classMsgs[i].id;
     }
     return null;
-  }, [classMsgs, classLastSeenId, classLastDeliveredId, classLastMsgIsFromStudent]);
+  }, [classMsgs, classLastMsgIsFromStudent]);
 
   const deleteSession = async (roomId: string, studentName: string) => {
     if (!confirm(`Are you sure you want to PERMANENTLY delete the mission with ${studentName}? This will be reflected on all your devices.`)) return;

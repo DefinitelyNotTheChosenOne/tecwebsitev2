@@ -258,20 +258,20 @@ export default function StudentSessionsPage() {
   }, [messages, lastMsgIsFromTutor]);
 
   const lastDeliveredId = useMemo(() => {
-    if (lastMsgIsFromTutor || lastSeenId) return null;
+    if (lastMsgIsFromTutor) return null;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].sender === 'student' && messages[i].status === 'delivered') return messages[i].id;
     }
     return null;
-  }, [messages, lastSeenId, lastMsgIsFromTutor]);
+  }, [messages, lastMsgIsFromTutor]);
 
   const lastSentId = useMemo(() => {
-    if (lastMsgIsFromTutor || lastSeenId || lastDeliveredId) return null;
+    if (lastMsgIsFromTutor) return null;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].sender === 'student' && (messages[i].status === 'sent' || messages[i].status === 'sending')) return messages[i].id;
     }
     return null;
-  }, [messages, lastSeenId, lastDeliveredId, lastMsgIsFromTutor]);
+  }, [messages, lastMsgIsFromTutor]);
 
   // ─── Report States ────────────────────────────────────────────────
   const [isReportingMode, setIsReportingMode] = useState(false);
