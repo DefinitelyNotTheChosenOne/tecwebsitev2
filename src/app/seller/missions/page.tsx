@@ -139,9 +139,11 @@ export default function SpecialistMissionBoard() {
   const fetchMissionsStable = useCallback(fetchMissions, []);
 
   useEffect(() => {
-    if (!profile?.id) return;
-
+    // 1. Always perform the initial manifest fetch
     fetchMissionsStable();
+
+    // 2. Real-time radar requires a resolved specialist identity
+    if (!profile?.id) return;
 
     // 4. Real-time Subscription for Incoming Handshaking (Tutor-Specific Filter)
     const chan = supabase.channel(`missions-live-${profile.id}`);
@@ -159,14 +161,12 @@ export default function SpecialistMissionBoard() {
     channelRef.current = chan;
 
     // 5. Also listen for new messages (signals in rooms involving this tutor)
-    // We listen for any message in a room where this tutor is a participant
     const msgChannel = supabase.channel(`missions-msgs-${profile.id}`);
     msgChannel.on('postgres_changes', { 
       event: 'INSERT', 
       schema: 'public', 
       table: 'chat_messages'
     }, async (payload) => {
-      // Check if the message belongs to a room own by the current tutor
       const { data: roomCheck } = await supabase.from('chat_rooms').select('id').eq('id', payload.new.room_id).eq('tutor_id', profile.id).maybeSingle();
       if (roomCheck) {
         fetchMissions();
