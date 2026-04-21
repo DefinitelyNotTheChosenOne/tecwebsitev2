@@ -393,20 +393,25 @@ export default function SessionPage() {
             
           let latestSignalTime = null;
           if (signalMsgs && signalMsgs.length > 0) {
-             const latestUnlockMsg = (signalMsgs as any[]).find((m: any) => 
-               m.content.toLowerCase().startsWith('signal: unlock') ||
-               m.content.toLowerCase().startsWith('signal initiated:') ||
-               m.content.toLowerCase().startsWith('discussion started')
-             );
+             // Look for ANY message that signals an active session/discussion/unlock
+             const latestUnlockMsg = (signalMsgs as any[]).find((m: any) => {
+                const c = m.content.toLowerCase();
+                return c.startsWith('signal: unlock') || 
+                       c.startsWith('signal initiated:') || 
+                       c.startsWith('discussion started');
+             });
              
              if (latestUnlockMsg) {
-                if (!subject) {
+                // Dynamic Subject Sync: Update subject if we find a signal with subject info
+                if (!subject || subject === 'General Discussion' || subject === 'Direct Handshake') {
                   const c = latestUnlockMsg.content;
                   if (c.toLowerCase().includes('requesting a ')) {
                     const match = c.match(/requesting a (.+) session/i);
                     if (match) subject = match[1];
-                  } else {
-                    subject = c.split('"')[1] || c.split('for ')[1];
+                  } else if (c.includes('"')) {
+                    subject = c.split('"')[1];
+                  } else if (c.includes('for ')) {
+                    subject = c.split('for ')[1];
                   }
                 }
                 latestSignalTime = new Date(latestUnlockMsg.created_at).getTime();
@@ -765,12 +770,24 @@ export default function SessionPage() {
   };
 
   const isClassEnded = (student: any) => {
+    // 1. If not accepted (pending), it's not "ended", it's just not started
+    if (!student.isAccepted) return false;
+
     const studentSchedules = [...(student.schedules || [])];
+    
+    // 2. If no schedules, an accepted session is definitely NOT ended (it's in discussion/prep phase)
     if (studentSchedules.length === 0) return false;
+
+    // 3. Sort schedules to find the definitive end of the last planned mission
     studentSchedules.sort((a, b) => toDate(a.class_date, a.end_time).getTime() - toDate(b.class_date, b.end_time).getTime());
     const last = studentSchedules[studentSchedules.length - 1];
     const lastEndTime = toDate(last.class_date, last.end_time).getTime();
-    if (student.latestSignalTime && student.latestSignalTime > lastEndTime) return false;
+    
+    // 4. Strategic Override: If a new signal (handshake/unlock) happened AFTER the last scheduled class ended, 
+    // it means a new engagement has started and we are NO LONGER in the "past".
+    if (student.latestSignalTime && (student.latestSignalTime + 1000) > lastEndTime) return false;
+    
+    // 5. Final check against wall clock
     return now.getTime() > lastEndTime;
   };
 

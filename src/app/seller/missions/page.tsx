@@ -85,12 +85,21 @@ export default function SpecialistMissionBoard() {
     const refinedDirect = (directRooms || [])
       .filter((room: any) => {
         const hasSession = sessionRoomIds.has(room.id);
-        return !hasSession;
+        const isRejected = (room.chat_messages || []).some((m: any) => 
+          m.content && m.content.toUpperCase().includes('SIGNAL REJECTED')
+        );
+        return !hasSession && !isRejected;
       })
       .map((room: any) => {
         // Handle Supabase joining returning either an object or an array of objects
         const studentProfile = Array.isArray(room.profiles) ? room.profiles[0] : room.profiles;
         
+        // Correctly identify the latest message for timestamping
+        const msgs = (room.chat_messages || []).sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        const latestMsg = msgs[0];
+
         // Parse the dynamic subject from the original signal message
         let dynamicSubject = "Direct Handshake";
         const initMsg = (room.chat_messages || []).find((m: any) => m.content && m.content.includes('SIGNAL INITIATED:'));
@@ -197,17 +206,13 @@ export default function SpecialistMissionBoard() {
         content: `Discussion Started for "${mission.subject}"`
       });
       
-      // Check if session exists
-      let { data: existSess } = await supabase.from('tutoring_sessions').select('id').eq('room_id', room.id).maybeSingle();
-      if (!existSess) {
-         // Create the official tutoring session to mark as 'active' for the tutor panel
-         await supabase.from('tutoring_sessions').insert({
-           room_id: room.id,
-           tutor_id: profile.id,
-           student_id: mission.student_id,
-           status: 'accepted'
-         });
-      }
+      // Upsert the official tutoring session to ensure it is 'accepted' regardless of history
+      await supabase.from('tutoring_sessions').upsert({
+        room_id: room.id,
+        tutor_id: profile.id,
+        student_id: mission.student_id,
+        status: 'accepted'
+      }, { onConflict: 'room_id' });
     }
 
     // 4. Notify Student
