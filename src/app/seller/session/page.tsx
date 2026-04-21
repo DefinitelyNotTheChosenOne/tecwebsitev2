@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { sendMessage as libSendMessage } from '@/lib/messages';
+import { sendMessage as libSendMessage, markRoomMessagesAsRead, markLiveClassMessagesAsRead } from '@/lib/messages';
 
 // ─── Custom scrollbar ───────────────────────────────────────────────────
 const ScrollStyles = () => (
@@ -595,9 +595,12 @@ export default function SessionPage() {
     fetchMsgs();
     const pollInterval = setInterval(fetchMsgs, 2500);
 
-    // ── Login Catch-Up ──
-    supabase.from('chat_messages').update({ status: 'delivered', delivered_at: new Date().toISOString() }).eq('room_id', selectedStudent.roomId).neq('sender_id', currentUser.id).eq('status', 'sent').then();
-    supabase.from('live_class_messages').update({ status: 'delivered', delivered_at: new Date().toISOString() }).eq('room_id', selectedStudent.roomId).neq('sender_id', currentUser.id).eq('status', 'sent').then();
+    // ── Persistent Read Handlers ──
+    if (activeTab === 'discussion') {
+      markRoomMessagesAsRead(selectedStudent.roomId, currentUser.id).catch(console.error);
+    } else if (activeTab === 'class') {
+      markLiveClassMessagesAsRead(selectedStudent.roomId, currentUser.id).catch(console.error);
+    }
 
     const channelName = `session:${selectedStudent.roomId}`;
     supabase.removeChannel(supabase.channel(channelName));

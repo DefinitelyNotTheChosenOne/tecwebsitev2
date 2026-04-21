@@ -58,3 +58,44 @@ export const sendMessage = async (
 
   return message;
 };
+
+/**
+ * Persists 'read' status to the database for a specific room.
+ * Should be triggered when a user enters a discussion thread.
+ */
+export const markRoomMessagesAsRead = async (roomId: string, currentUserId: string) => {
+  const { error } = await supabase
+    .from('chat_messages')
+    .update({ 
+      status: 'read', 
+      read_at: new Date().toISOString() 
+    })
+    .eq('room_id', roomId)
+    .neq('sender_id', currentUserId)
+    .in('status', ['sent', 'delivered']);
+
+  if (error) {
+    console.error('Failed to persist read status:', error);
+    throw error;
+  }
+};
+
+/**
+ * Persists 'read' status for live class classrooms.
+ */
+export const markLiveClassMessagesAsRead = async (roomId: string, currentUserId: string) => {
+  const { error } = await supabase
+    .from('live_class_messages')
+    .update({ 
+      status: 'read', 
+      read_at: new Date().toISOString() 
+    })
+    .eq('room_id', roomId)
+    .neq('sender_id', currentUserId)
+    .in('status', ['sent', 'delivered']);
+
+  if (error) {
+    console.error('Failed to persist live read status:', error);
+    throw error;
+  }
+};

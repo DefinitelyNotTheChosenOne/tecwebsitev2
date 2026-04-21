@@ -9,7 +9,7 @@ import {
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { sendMessage as libSendMessage } from '@/lib/messages';
+import { sendMessage as libSendMessage, markRoomMessagesAsRead } from '@/lib/messages';
 
 export default function MessageTerminal() {
   const router = useRouter();
@@ -26,8 +26,10 @@ export default function MessageTerminal() {
   }, []);
 
   useEffect(() => {
-    if (activeRoom) {
+    if (activeRoom && profile) {
       fetchMessages(activeRoom.id);
+      markRoomMessagesAsRead(activeRoom.id, profile.id).catch(console.error);
+
       // Subscribe to real-time signals
       const channel = supabase
         .channel(`room-${activeRoom.id}`)
@@ -68,7 +70,7 @@ export default function MessageTerminal() {
   const fetchMessages = async (roomId: string) => {
     const { data } = await supabase
       .from('chat_messages')
-      .select('*')
+      .select('*, status, read_at')
       .eq('room_id', roomId)
       .order('created_at', { ascending: true });
     setMessages(data || []);

@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePresence, UserStatus } from '@/hooks/usePresence';
 import Link from 'next/link';
-import { sendMessage as libSendMessage } from '@/lib/messages';
+import { sendMessage as libSendMessage, markRoomMessagesAsRead, markLiveClassMessagesAsRead } from '@/lib/messages';
 
 // ─── Custom scrollbar ───────────────────────────────────────────────────
 const ScrollStyles = () => (
@@ -453,27 +453,17 @@ export default function StudentSessionsPage() {
   // ─── Automatic Read Triggers ──────────────────────────
   useEffect(() => {
     if (activeTab === 'discussion' && selectedSession?.roomId) {
-      supabase.from('chat_messages')
-        .update({ status: 'read', read_at: new Date().toISOString() })
-        .eq('room_id', selectedSession.roomId)
-        .neq('sender_id', currentUser?.id)
-        .neq('status', 'read')
-        .then(() => {
-          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
-        });
+      markRoomMessagesAsRead(selectedSession.roomId, currentUser?.id).then(() => {
+        if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
+      }).catch(console.error);
     }
   }, [activeTab, selectedSession?.roomId, currentUser?.id, messages]);
 
   useEffect(() => {
     if (activeTab === 'class' && selectedSession?.roomId) {
-      supabase.from('live_class_messages')
-        .update({ status: 'read', read_at: new Date().toISOString() })
-        .eq('room_id', selectedSession.roomId)
-        .neq('sender_id', currentUser?.id)
-        .neq('status', 'read')
-        .then(() => {
-          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
-        });
+      markLiveClassMessagesAsRead(selectedSession.roomId, currentUser?.id).then(() => {
+        if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
+      }).catch(console.error);
     }
   }, [activeTab, selectedSession?.roomId, currentUser?.id, classMessages]);
 
