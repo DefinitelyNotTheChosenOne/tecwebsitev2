@@ -139,26 +139,38 @@ export default function SpecialistMissionBoard() {
   const fetchMissionsStable = useCallback(fetchMissions, []);
 
   useEffect(() => {
+    if (!profile?.id) return;
+
     fetchMissionsStable();
 
-    // 4. Real-time Subscription for Incoming Handshaking
-    const chan = supabase.channel(`missions-live-${Math.random()}`);
-    chan.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_rooms' }, (payload) => {
-      // Use the profile state if available
-      if (payload.new.tutor_id === profile?.id) {
-        setToast("NEW INBOUND TUNNEL DETECTED");
-        fetchMissions();
-        setTimeout(() => setToast(null), 5000);
-      }
+    // 4. Real-time Subscription for Incoming Handshaking (Tutor-Specific Filter)
+    const chan = supabase.channel(`missions-live-${profile.id}`);
+    chan.on('postgres_changes', { 
+      event: 'INSERT', 
+      schema: 'public', 
+      table: 'chat_rooms',
+      filter: `tutor_id=eq.${profile.id}`
+    }, (payload) => {
+      setToast("NEW INBOUND TUNNEL DETECTED");
+      fetchMissions();
+      setTimeout(() => setToast(null), 5000);
     });
     chan.subscribe();
     channelRef.current = chan;
 
-    // 5. Also listen for new messages (signals in existing rooms)
-    const msgChannel = supabase.channel(`missions-msgs-${Math.random()}`);
-    msgChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-      // Refresh on any new message in a visible room
-      fetchMissions();
+    // 5. Also listen for new messages (signals in rooms involving this tutor)
+    // We listen for any message in a room where this tutor is a participant
+    const msgChannel = supabase.channel(`missions-msgs-${profile.id}`);
+    msgChannel.on('postgres_changes', { 
+      event: 'INSERT', 
+      schema: 'public', 
+      table: 'chat_messages'
+    }, async (payload) => {
+      // Check if the message belongs to a room own by the current tutor
+      const { data: roomCheck } = await supabase.from('chat_rooms').select('id').eq('id', payload.new.room_id).eq('tutor_id', profile.id).maybeSingle();
+      if (roomCheck) {
+        fetchMissions();
+      }
     });
     msgChannel.subscribe();
     msgChannelRef.current = msgChannel;
@@ -167,7 +179,7 @@ export default function SpecialistMissionBoard() {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
       if (msgChannelRef.current) supabase.removeChannel(msgChannelRef.current);
     };
-  }, [fetchMissionsStable]);
+  }, [profile?.id, fetchMissionsStable]);
 
   const initiateDiscussion = async (mission: any) => {
     if (!profile) return;
