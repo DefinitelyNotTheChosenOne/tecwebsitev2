@@ -9,6 +9,7 @@ import {
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { sendMessage as libSendMessage } from '@/lib/messages';
 
 export default function MessageTerminal() {
   const router = useRouter();
@@ -123,15 +124,20 @@ export default function MessageTerminal() {
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeRoom || !profile) return;
     
-    const message = {
-      room_id: activeRoom.id,
-      sender_id: profile.id,
-      content: newMessage.trim()
-    };
-
-    const { error } = await supabase.from('chat_messages').insert(message);
-    if (!error) {
-       setNewMessage('');
+    // Determine recipient based on role
+    const recipientId = profile.role === 'seller' ? activeRoom.student_id : activeRoom.tutor_id;
+    
+    try {
+      await libSendMessage(
+        activeRoom.id,
+        profile.id,
+        recipientId,
+        newMessage.trim()
+      );
+      setNewMessage('');
+    } catch (err: any) {
+      console.error("Transmission Error:", err);
+      alert("SIGNAL FAILURE: " + (err.message || "Unknown encryption error."));
     }
   };
 

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { sendMessage as libSendMessage } from '@/lib/messages';
 
 // ─── Custom scrollbar ───────────────────────────────────────────────────
 const ScrollStyles = () => (
@@ -28,7 +29,7 @@ const ScrollStyles = () => (
 );
 
 // ─── Types ──────────────────────────────────────────────────────────────
-type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen';
+type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 type Message = { id: number | string; sender: 'tutor' | 'student'; text: string; time: string; status?: MessageStatus; };
 type ClassSlot = {
   id: number;
@@ -87,7 +88,7 @@ const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: {
   
   if (status === 'sent') return <Check className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
   if (status === 'delivered') return <CheckCheck className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
-  if (status === 'seen') return (
+  if (status === 'read') return (
     <motion.div 
       layoutId="seen-avatar"
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
@@ -563,7 +564,7 @@ export default function SessionPage() {
             sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === currentUser?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus : undefined
+            status: m.sender_id === currentUser?.id ? (m.read_at ? 'read' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus : undefined
           }));
         mergeDiscMsgs(mapped);
       }
@@ -630,7 +631,7 @@ export default function SessionPage() {
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
             
             const list = m.sender_id !== user?.id 
-              ? studentMsgs.map(old => old.sender === 'tutor' ? { ...old, status: 'seen' as MessageStatus } : old)
+              ? studentMsgs.map(old => old.sender === 'tutor' ? { ...old, status: 'read' as MessageStatus } : old)
               : studentMsgs;
 
             return { ...prev, [student.id]: [...list, { id: m.id, sender: m.sender_id === user?.id ? 'tutor' : 'student', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status }] };
@@ -665,7 +666,7 @@ export default function SessionPage() {
             if (studentMsgs.some(existing => existing.id === m.id)) return prev;
 
             const list = m.sender_id !== user?.id 
-              ? studentMsgs.map(old => old.sender === 'tutor' ? { ...old, status: 'seen' as MessageStatus } : old)
+              ? studentMsgs.map(old => old.sender === 'tutor' ? { ...old, status: 'read' as MessageStatus } : old)
               : studentMsgs;
 
             return { ...prev, [student.id]: [...list, { id: m.id, sender: m.sender_id === user?.id ? 'tutor' : 'student', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status }] };
@@ -858,13 +859,18 @@ export default function SessionPage() {
     setDiscInput('');
     const optimisticId = `opt-${Date.now()}`;
     setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), { id: optimisticId, sender: 'tutor', text: content, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'sending' }] }));
-    const { data } = await supabase.from('chat_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser.id, content }).select().single();
-    if (data) {
-      if (channelRef.current) {
-        channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
-        channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
+    
+    try {
+      const data = await libSendMessage(selectedStudent.roomId, currentUser.id, selectedStudent.id, content, 'chat_messages');
+      if (data) {
+        if (channelRef.current) {
+          channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
+          channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
+        }
+        setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: data.status } : m) }));
       }
-      setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: studentStatus === 'online' ? 'delivered' : 'sent' } : m) }));
+    } catch (err) {
+      console.error("Transmission Error:", err);
     }
   };
 
@@ -874,13 +880,18 @@ export default function SessionPage() {
     setClassInput('');
     const optimisticId = `opt-${Date.now()}`;
     setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: [...(prev[selectedStudent.id] || []), { id: optimisticId, sender: 'tutor', text: content, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'sending' }] }));
-    const { data } = await supabase.from('live_class_messages').insert({ room_id: selectedStudent.roomId, sender_id: currentUser.id, content }).select().single();
-    if (data) {
-      if (channelRef.current) {
-        channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
-        channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
+    
+    try {
+      const data = await libSendMessage(selectedStudent.roomId, currentUser.id, selectedStudent.id, content, 'live_class_messages');
+      if (data) {
+        if (channelRef.current) {
+          channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
+          channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
+        }
+        setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: data.status } : m) }));
       }
-      setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: studentStatus === 'online' ? 'delivered' : 'sent' } : m) }));
+    } catch (err) {
+      console.error("Transmission Error:", err);
     }
   };
 

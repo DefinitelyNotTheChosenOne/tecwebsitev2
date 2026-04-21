@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePresence, UserStatus } from '@/hooks/usePresence';
 import Link from 'next/link';
+import { sendMessage as libSendMessage } from '@/lib/messages';
 
 // ─── Custom scrollbar ───────────────────────────────────────────────────
 const ScrollStyles = () => (
@@ -28,7 +29,7 @@ const ScrollStyles = () => (
 );
 
 // ─── Types ──────────────────────────────────────────────────────────────
-type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen';
+type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 type Message = { 
   id: string; 
   sender: 'student' | 'tutor'; 
@@ -98,15 +99,17 @@ const MessageStatusIcon = memo(({ status, recipientInitial, recipientAvatar }: {
   // 3. Delivered: A double check icon
   if (status === 'delivered') return <CheckCheck className="w-3.5 h-3.5 text-blue-500" strokeWidth={3} />;
   
-  // 4. Seen: recipient's avatar
-  if (status === 'seen') return (
-    <div className="w-4 h-4 rounded-full bg-brand-primary overflow-hidden flex items-center justify-center shrink-0 shadow-sm ring-1 ring-white">
+  // 4. Read: recipient's avatar
+  if (status === 'read') return (
+    <motion.div 
+      layoutId="seen-avatar"
+      className="w-4 h-4 rounded-full bg-brand-primary overflow-hidden flex items-center justify-center shrink-0 shadow-sm ring-1 ring-white">
       {recipientAvatar ? (
         <img src={recipientAvatar} className="w-full h-full object-cover" alt="" />
       ) : (
         <span className="text-[7px] font-black text-brand-dark">{(recipientInitial || 'T').charAt(0)}</span>
       )}
-    </div>
+    </motion.div>
   );
   
   return null;
@@ -249,7 +252,7 @@ export default function StudentSessionsPage() {
   const lastSeenId = useMemo(() => {
     if (lastMsgIsFromTutor) return null;
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].sender === 'student' && messages[i].status === 'seen') return messages[i].id;
+      if (messages[i].sender === 'student' && messages[i].status === 'read') return messages[i].id;
     }
     return null;
   }, [messages, lastMsgIsFromTutor]);
@@ -451,10 +454,10 @@ export default function StudentSessionsPage() {
   useEffect(() => {
     if (activeTab === 'discussion' && selectedSession?.roomId) {
       supabase.from('chat_messages')
-        .update({ status: 'seen', read_at: new Date().toISOString() })
+        .update({ status: 'read', read_at: new Date().toISOString() })
         .eq('room_id', selectedSession.roomId)
         .neq('sender_id', currentUser?.id)
-        .neq('status', 'seen')
+        .neq('status', 'read')
         .then(() => {
           if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
         });
@@ -464,10 +467,10 @@ export default function StudentSessionsPage() {
   useEffect(() => {
     if (activeTab === 'class' && selectedSession?.roomId) {
       supabase.from('live_class_messages')
-        .update({ status: 'seen', read_at: new Date().toISOString() })
+        .update({ status: 'read', read_at: new Date().toISOString() })
         .eq('room_id', selectedSession.roomId)
         .neq('sender_id', currentUser?.id)
-        .neq('status', 'seen')
+        .neq('status', 'read')
         .then(() => {
           if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
         });
@@ -510,7 +513,7 @@ export default function StudentSessionsPage() {
               text: m.content,
               time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               status: m.sender_id === currentUser.id
-                ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus
+                ? (m.read_at ? 'read' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus
                 : undefined
             })),
           setMessages
@@ -530,9 +533,7 @@ export default function StudentSessionsPage() {
             sender: (m.sender_id === currentUser.id ? 'student' : 'tutor') as 'student' | 'tutor',
             text: m.content,
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.sender_id === currentUser.id
-              ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus
-              : undefined
+            status: m.sender_id === currentUser.id ? (m.read_at ? 'read' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus : undefined
           })),
           setClassMessages
         );
@@ -578,14 +579,14 @@ export default function StudentSessionsPage() {
           return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status } as Message];
         });
       })
-      // ── KEY FIX: Listen for UPDATE events so seen status propagates instantly ──
+      // ── KEY FIX: Listen for UPDATE events so read status propagates instantly ──
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' }, (payload: { new: any }) => {
         const m = payload.new;
         const sess = selectedSessionRef.current;
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
         if (m.sender_id !== user?.id) return; // only care about OUR messages being updated
-        const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent');
+        const status: MessageStatus = m.read_at ? 'read' : m.delivered_at ? 'delivered' : (m.status || 'sent');
         setMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
       .on('broadcast', { event: 'new_message' }, (payload: { payload: any }) => {
@@ -623,7 +624,7 @@ export default function StudentSessionsPage() {
         const user = currentUserRef.current;
         if (!sess || m.room_id !== sess.roomId) return;
         if (m.sender_id !== user?.id) return;
-        const status: MessageStatus = m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent');
+        const status: MessageStatus = m.read_at ? 'read' : m.delivered_at ? 'delivered' : (m.status || 'sent');
         setClassMessages(prev => prev.map(old => old.id === m.id ? { ...old, status } : old));
       })
       .on('broadcast', { event: 'new_class_message' }, (payload: { payload: any }) => {
@@ -636,15 +637,15 @@ export default function StudentSessionsPage() {
           return [...prev, { id: m.id, sender: m.sender_id === user?.id ? 'student' : 'tutor', text: m.content, time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: m.sender_id === user?.id ? 'sent' : undefined } as Message];
         });
       })
-      // ── Tutor read our messages → upgrade to Seen ─────────────────────
+      // ── Tutor read our messages → upgrade to Read ─────────────────────
       .on('broadcast', { event: 'messages_read' }, ({ payload }: { payload: any }) => {
         const sess = selectedSessionRef.current;
         if (!sess || payload.roomId !== sess.roomId) return;
         
         const { msgId } = payload;
         
-        setMessages(prev => prev.map(m => (m.id === msgId || !msgId) && m.sender === 'student' ? { ...m, status: 'seen' as MessageStatus } : m));
-        setClassMessages(prev => prev.map(m => (m.id === msgId || !msgId) && m.sender === 'student' ? { ...m, status: 'seen' as MessageStatus } : m));
+        setMessages(prev => prev.map(m => (m.id === msgId || !msgId) && m.sender === 'student' ? { ...m, status: 'read' as MessageStatus } : m));
+        setClassMessages(prev => prev.map(m => (m.id === msgId || !msgId) && m.sender === 'student' ? { ...m, status: 'read' as MessageStatus } : m));
       })
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
@@ -813,32 +814,17 @@ export default function StudentSessionsPage() {
     };
     setMessages(prev => [...prev, optimisticMsg]);
 
-    const { data, error } = await supabase.from('chat_messages').insert({
-      room_id: selectedSession.roomId,
-      sender_id: currentUser.id,
-      content
-    }).select().single();
-
-    if (error) {
-      console.error("Transmission Error:", error.message);
-      setMessages(prev => prev.filter(m => m.id !== optimisticId));
-    } else if (data) {
-      if (channelRef.current) {
-        channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
+    try {
+      const data = await libSendMessage(selectedSession.roomId, currentUser.id, (selectedSession as any).id, content, 'chat_messages');
+      if (data) {
+        if (channelRef.current) {
+          channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
+        }
+        setMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: data.id, status: data.status } : m));
       }
-
-      // ── Implicit Read: Sending a message proves we saw their messages ──
-      supabase.from('chat_messages')
-        .update({ read_at: new Date().toISOString() })
-        .eq('room_id', selectedSession.roomId)
-        .neq('sender_id', currentUser.id)
-        .is('read_at', null)
-        .then(() => {
-          if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
-        });
-
-      const finalStatus: MessageStatus = isTutorOnline ? 'delivered' : 'sent';
-      setMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: data.id, status: finalStatus } : m));
+    } catch (err) {
+      console.error("Transmission Error:", err);
+      setMessages(prev => prev.filter(m => m.id !== optimisticId));
     }
   };
 

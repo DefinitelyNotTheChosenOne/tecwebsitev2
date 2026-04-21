@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { sendMessage as libSendMessage } from '@/lib/messages';
 
 // Temporal Intelligence Utility
 const formatReceivedTime = (date: Date, now: Date) => {
@@ -222,11 +223,12 @@ export default function SpecialistMissionBoard() {
 
     // 3. Official specialist engagement (signals acceptance)
     if (mission.isDirect && room) {
-      await supabase.from('chat_messages').insert({
-        room_id: room.id,
-        sender_id: profile.id,
-        content: `Discussion Started for "${mission.subject}"`
-      });
+      await libSendMessage(
+        room.id,
+        profile.id,
+        mission.student_id,
+        `Discussion Started for "${mission.subject}"`
+      );
       
       // Upsert the official tutoring session to ensure it is 'accepted' regardless of history
       await supabase.from('tutoring_sessions').upsert({
