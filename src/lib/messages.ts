@@ -44,6 +44,14 @@ export const sendMessage = async (
 
   if (messageError) throw messageError;
 
+  // Step 1: Verify the Server Truth
+  console.log('SERVER_INSERT_RESULT:', {
+    id: message.id,
+    status: message.status,
+    delivered_at: message.delivered_at,
+    table: tableName
+  });
+
   // 5. Handle Moderation Flags (Logged to flagged_content)
   // Note: Flags always reference the content and sender, regardless of table parity.
   if (flag.isFlagged && message) {

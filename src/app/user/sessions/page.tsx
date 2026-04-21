@@ -131,7 +131,7 @@ const ChatBubble = memo(({ msg, tutorInitial, tutorAvatar, isReportingMode, isSe
   const bubbleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (msg.sender === 'student' || !onVisible || msg.id.toString().startsWith('opt-')) return;
+    if (msg.sender === 'student' || !onVisible || msg.id.toString().startsWith('opt-') || msg.status === 'read') return;
     
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
@@ -805,12 +805,19 @@ export default function StudentSessionsPage() {
     setMessages(prev => [...prev, optimisticMsg]);
 
     try {
-      const data = await libSendMessage(selectedSession.roomId, currentUser.id, (selectedSession as any).id, content, 'chat_messages');
+      const data = await libSendMessage(selectedSession.roomId, currentUser.id, selectedSession.id, content, 'chat_messages');
       if (data) {
         if (channelRef.current) {
           channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
         }
-        setMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: data.id, status: data.status } : m));
+        // Hydrate with server truth
+        setMessages(prev => prev.map(m => m.id === optimisticId ? { 
+          ...m, 
+          id: data.id, 
+          status: data.status,
+          delivered_at: data.delivered_at,
+          read_at: data.read_at
+        } : m));
       }
     } catch (err) {
       console.error("Transmission Error:", err);
@@ -833,32 +840,30 @@ export default function StudentSessionsPage() {
     };
     setClassMessages(prev => [...prev, optimisticMsg]);
 
-    const { data, error } = await supabase.from('live_class_messages').insert({
-      room_id: selectedSession.roomId,
-      sender_id: currentUser.id,
-      content
-    }).select().single();
+    try {
+      const data = await libSendMessage(selectedSession.roomId, currentUser.id, selectedSession.id, content, 'live_class_messages');
+      if (data) {
+        if (channelRef.current) {
+          channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
+        }
 
-    if (error) {
-      console.error("Signal Failed:", error.message);
-      setClassMessages(prev => prev.filter(m => m.id !== optimisticId));
-    } else if (data) {
-      if (channelRef.current) {
-        channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
-      }
-
-      // ── Implicit Read: Sending a message proves we saw their messages ──
-      supabase.from('live_class_messages')
-        .update({ read_at: new Date().toISOString() })
-        .eq('room_id', selectedSession.roomId)
-        .neq('sender_id', currentUser.id)
-        .is('read_at', null)
-        .then(() => {
+        // ── Implicit Read: Sending a message proves we saw their messages ──
+        markLiveClassMessagesAsRead(selectedSession.roomId, currentUser.id).then(() => {
           if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedSession.roomId, msgId: null } });
-        });
+        }).catch(console.error);
 
-      const finalStatus: MessageStatus = isTutorOnline ? 'delivered' : 'sent';
-      setClassMessages(prev => prev.map(m => m.id === optimisticId ? { ...m, id: data.id, status: finalStatus } : m));
+        // Hydrate with server truth
+        setClassMessages(prev => prev.map(m => m.id === optimisticId ? { 
+          ...m, 
+          id: data.id, 
+          status: data.status,
+          delivered_at: data.delivered_at,
+          read_at: data.read_at
+        } : m));
+      }
+    } catch (err) {
+      console.error("Transmission Error:", err);
+      setClassMessages(prev => prev.filter(m => m.id !== optimisticId));
     }
   };
 
@@ -1292,7 +1297,7 @@ export default function StudentSessionsPage() {
                           isReportingMode={false}
                           isSelected={false}
                           onVisible={markClassAsRead} 
-                          showStatus={m.sender === 'student' && m.id === (classMessages.filter(msg => msg.sender === 'student' && msg.status === 'seen').pop()?.id || classMessages.filter(msg => msg.sender === 'student' && msg.status === 'delivered').pop()?.id || classMessages.filter(msg => msg.sender === 'student' && (msg.status === 'sent' || msg.status === 'sending')).pop()?.id)}
+                          showStatus={m.sender === 'student' && m.id === (classMessages.filter(msg => msg.sender === 'student' && msg.status === 'read').pop()?.id || classMessages.filter(msg => msg.sender === 'student' && msg.status === 'delivered').pop()?.id || classMessages.filter(msg => msg.sender === 'student' && (msg.status === 'sent' || msg.status === 'sending')).pop()?.id)}
                         />
                       ))}
                       <div ref={classBottomRef} />

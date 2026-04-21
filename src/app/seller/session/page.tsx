@@ -513,10 +513,10 @@ export default function SessionPage() {
   useEffect(() => {
     if (activeTab === 'discussion' && selectedStudent?.roomId) {
       supabase.from('chat_messages')
-        .update({ status: 'seen', read_at: new Date().toISOString() })
+        .update({ status: 'read', read_at: new Date().toISOString() })
         .eq('room_id', selectedStudent.roomId)
         .neq('sender_id', currentUser?.id)
-        .neq('status', 'seen')
+        .neq('status', 'read')
         .then(() => {
           if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
         });
@@ -526,10 +526,10 @@ export default function SessionPage() {
   useEffect(() => {
     if (activeTab === 'class' && selectedStudent?.roomId) {
       supabase.from('live_class_messages')
-        .update({ status: 'seen', read_at: new Date().toISOString() })
+        .update({ status: 'read', read_at: new Date().toISOString() })
         .eq('room_id', selectedStudent.roomId)
         .neq('sender_id', currentUser?.id)
-        .neq('status', 'seen')
+        .neq('status', 'read')
         .then(() => {
           if (channelRef.current) channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
         });
@@ -576,7 +576,7 @@ export default function SessionPage() {
           sender: (m.sender_id === currentUser?.id ? 'tutor' : 'student') as 'tutor' | 'student',
           text: m.content,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: m.sender_id === currentUser?.id ? (m.read_at ? 'seen' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus : undefined
+          status: m.sender_id === currentUser?.id ? (m.read_at ? 'read' : m.delivered_at ? 'delivered' : (m.status || 'sent')) as MessageStatus : undefined
         }));
         setAllClassMsgs(prev => {
           const existing = prev[selectedStudent.id] || [];
@@ -688,11 +688,11 @@ export default function SessionPage() {
         const { msgId } = payload;
         setAllDiscMsgs(prev => ({
           ...prev,
-          [student.id]: (prev[student.id] || []).map(m => (m.id === msgId || !msgId) && m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m)
+          [student.id]: (prev[student.id] || []).map(m => (m.id === msgId || !msgId) && m.sender === 'tutor' ? { ...m, status: 'read' as MessageStatus } : m)
         }));
         setAllClassMsgs(prev => ({
           ...prev,
-          [student.id]: (prev[student.id] || []).map(m => (m.id === msgId || !msgId) && m.sender === 'tutor' ? { ...m, status: 'seen' as MessageStatus } : m)
+          [student.id]: (prev[student.id] || []).map(m => (m.id === msgId || !msgId) && m.sender === 'tutor' ? { ...m, status: 'read' as MessageStatus } : m)
         }));
       })
       .on('broadcast', { event: 'message_delivered' }, ({ payload }: { payload: any }) => {
@@ -870,7 +870,14 @@ export default function SessionPage() {
           channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: data });
           channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
         }
-        setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: data.status } : m) }));
+        // Hydrate with server truth
+        setAllDiscMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { 
+          ...m, 
+          id: data.id, 
+          status: data.status,
+          delivered_at: data.delivered_at,
+          read_at: data.read_at
+        } : m) }));
       }
     } catch (err) {
       console.error("Transmission Error:", err);
@@ -891,7 +898,14 @@ export default function SessionPage() {
           channelRef.current.send({ type: 'broadcast', event: 'new_class_message', payload: data });
           channelRef.current.send({ type: 'broadcast', event: 'messages_read', payload: { roomId: selectedStudent.roomId, msgId: null } });
         }
-        setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { ...m, id: data.id, status: data.status } : m) }));
+        // Hydrate with server truth
+        setAllClassMsgs(prev => ({ ...prev, [selectedStudent.id]: (prev[selectedStudent.id] || []).map(m => m.id === optimisticId ? { 
+          ...m, 
+          id: data.id, 
+          status: data.status,
+          delivered_at: data.delivered_at,
+          read_at: data.read_at
+        } : m) }));
       }
     } catch (err) {
       console.error("Transmission Error:", err);
