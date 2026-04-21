@@ -193,7 +193,7 @@ export default function Home() {
               <span className="text-brand-primary not-italic text-[10px] tracking-[5px] mb-2">Institutional Mastery</span>
               Browse Academic <span className="text-brand-primary">Markets</span>
             </h2>
-            <Link href="/user/subjects" className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
+            <Link href="/subjects" className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
                View Full Directory
             </Link>
           </div>
@@ -213,7 +213,7 @@ export default function Home() {
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
           >
           {(activeSubjects.length > 0 ? activeSubjects : fallbackSubjects).map((sub, i) => (
-            <Link key={i} href={session ? `/user/subjects/${sub.slug}` : `/auth?redirect=/user/subjects/${sub.slug}`}>
+            <Link key={i} href={session ? `/subjects/${sub.slug}` : `/auth?redirect=/subjects/${sub.slug}`}>
               <motion.div 
                 variants={{
                   hidden: { opacity: 0, scale: 0.9, y: 20 },

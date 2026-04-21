@@ -245,7 +245,7 @@ export default function SpecialistMissionBoard() {
             type: 'MESSAGE',
             title: 'Handshake Declined',
             content: `Specialist ${profile.full_name} is unavailable. Try another market.`,
-            link: '/user/subjects'
+            link: '/subjects'
           });
 
           setMissions(prev => prev.filter(m => m.id !== mission.id));

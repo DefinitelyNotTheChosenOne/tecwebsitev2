@@ -252,7 +252,7 @@ export default function SubjectMarketFeed() {
       <div className="fixed inset-0 pointer-events-none opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900 via-transparent to-transparent blur-3xl animate-pulse" />
 
       <header className="max-w-6xl mx-auto mb-20 relative z-10">
-         <Link href="/user/subjects" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group mb-6">
+         <Link href="/subjects" className="inline-flex items-center gap-2 text-brand-secondary hover:text-white transition-all uppercase text-[10px] font-black tracking-widest group mb-6">
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1" /> Back to Subject Directory
          </Link>
          <div className="flex flex-col md:flex-row items-end justify-between gap-10">
@@ -336,7 +336,7 @@ export default function SubjectMarketFeed() {
               <Search className="w-20 h-20 text-zinc-800 mx-auto mb-8 opacity-20" />
               <h2 className="text-4xl font-black uppercase text-zinc-700 italic text-zinc-500">No Specialists Manifested</h2>
               <p className="text-brand-secondary font-medium uppercase tracking-[5px] text-[10px] mt-4">Try another academic market or post a "Help Wanted" mission.</p>
-              <Link href="/user/subjects" className="mt-10 inline-block px-10 py-5 bg-brand-primary text-brand-dark rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl active:scale-95 transition-all">
+              <Link href="/subjects" className="mt-10 inline-block px-10 py-5 bg-brand-primary text-brand-dark rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl active:scale-95 transition-all">
                  Return to Directory
               </Link>
            </div>

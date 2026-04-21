@@ -940,7 +940,7 @@ export default function StudentSessionsPage() {
         <p className="text-sm text-slate-400 font-medium leading-relaxed">You haven't connected with any tutors yet. Browse subjects or post a help request to get started.</p>
       </div>
       <div className="flex gap-3 mt-4">
-        <Link href="/user/subjects" className="px-6 py-3 bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all">Browse Subjects</Link>
+        <Link href="/subjects" className="px-6 py-3 bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all">Browse Subjects</Link>
         <Link href="/user/help-wanted" className="px-6 py-3 bg-white border border-slate-200 text-brand-dark rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all">Post Request</Link>
       </div>
     </div>

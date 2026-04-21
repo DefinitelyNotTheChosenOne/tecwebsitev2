@@ -241,7 +241,7 @@ export default function SellerDashboard() {
             </div>
           </motion.div>
           <div className="flex items-center gap-3">
-            <Link href={isTutor ? `/user/tutors/${profile?.id}` : "/user/subjects"} className="px-6 py-3.5 bg-brand-primary text-brand-dark rounded-xl font-black text-[9px] uppercase tracking-[2px] shadow-lg hover:bg-white hover:-translate-y-0.5 transition-all">
+            <Link href={isTutor ? `/tutors/${profile?.id}` : "/subjects"} className="px-6 py-3.5 bg-brand-primary text-brand-dark rounded-xl font-black text-[9px] uppercase tracking-[2px] shadow-lg hover:bg-white hover:-translate-y-0.5 transition-all">
               {isTutor ? 'Modify Dossier' : 'Browse'}
             </Link>
             <button onClick={handleSignOut} className="px-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-red-400 flex items-center gap-2 transition-all">
